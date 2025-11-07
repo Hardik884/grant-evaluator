@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Sparkles, FileSearch, BarChart3, CheckCircle2 } from 'lucide-react';
+import { Sparkles, FileSearch, BarChart3, CheckCircle2, Brain, DollarSign, AlertTriangle } from 'lucide-react';
 
 const stages = [
-  { icon: FileSearch, label: 'Analyzing Document', duration: 1000 },
-  { icon: Sparkles, label: 'Generating Insights', duration: 1200 },
-  { icon: BarChart3, label: 'Computing Scores', duration: 1000 },
-  { icon: CheckCircle2, label: 'Finalizing Evaluation', duration: 800 }
+  { icon: FileSearch, label: 'Loading document and analyzing pages', duration: 2000 },
+  { icon: Brain, label: 'Detecting research domain', duration: 1500 },
+  { icon: Sparkles, label: 'Generating structured summary', duration: 3000 },
+  { icon: BarChart3, label: 'Running scoring analysis', duration: 2500 },
+  { icon: AlertTriangle, label: 'Generating detailed critique', duration: 2500 },
+  { icon: DollarSign, label: 'Evaluating budget breakdown', duration: 2000 },
+  { icon: CheckCircle2, label: 'Finalizing decision and scores', duration: 1500 }
 ];
 
 export function LoadingAnimation() {
   const [currentStage, setCurrentStage] = useState(0);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Update stage
     if (currentStage >= stages.length) return;
 
     const timer = setTimeout(() => {
@@ -19,6 +24,18 @@ export function LoadingAnimation() {
     }, stages[currentStage].duration);
 
     return () => clearTimeout(timer);
+  }, [currentStage]);
+
+  useEffect(() => {
+    // Smooth progress bar animation
+    const targetProgress = Math.min(100, ((currentStage + 1) / stages.length) * 100);
+    
+    setProgress(prev => {
+      // Smoothly animate to target, but never exceed 100
+      const diff = targetProgress - prev;
+      if (Math.abs(diff) < 0.1) return targetProgress;
+      return Math.min(100, prev + diff * 0.3);
+    });
   }, [currentStage]);
 
   return (
@@ -47,6 +64,21 @@ export function LoadingAnimation() {
               </div>
             </div>
 
+            {/* Progress Bar */}
+            <div className="w-full space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Progress</span>
+                <span className="text-accent-magenta font-semibold">{Math.round(progress)}%</span>
+              </div>
+              <div className="w-full h-2 bg-charcoal-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-primary transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Stage List */}
             <div className="w-full space-y-3">
               {stages.map((stage, index) => (
                 <div key={index} className="flex items-center gap-3">
@@ -70,17 +102,8 @@ export function LoadingAnimation() {
               ))}
             </div>
 
-            <div className="w-full bg-charcoal-700 rounded-full h-2 overflow-hidden">
-              <div
-                className="h-full bg-gradient-primary transition-all duration-500 ease-out"
-                style={{
-                  width: `${((currentStage + 1) / stages.length) * 100}%`
-                }}
-              />
-            </div>
-
-            <p className="text-gray-400 text-sm text-center">
-              Processing your grant application...
+            <p className="text-sm text-gray-400 text-center mt-4">
+              This may take a minute... Our AI is thoroughly analyzing your proposal.
             </p>
           </div>
         </div>

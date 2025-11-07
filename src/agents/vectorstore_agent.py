@@ -30,7 +30,8 @@ def vectorstore_agent(pages: list, config_path="config.yaml", persist_dir=None, 
     # wrapped retriever
     def ask(query: str):
         # Ensure a stable ordering of retrieved documents
-        retrieved_docs = retriever.get_relevant_documents(query)
+        # Use invoke() instead of deprecated get_relevant_documents()
+        retrieved_docs = retriever.invoke(query)
         return [
             {
                 "page_number": doc.metadata.get("page", "Unknown"),

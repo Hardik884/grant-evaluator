@@ -65,7 +65,7 @@ def strip_codeblock(text: str) -> str:
     """
     return re.sub(r"^```(?:json)?\n|```$", "", text.strip(), flags=re.MULTILINE)
 
-def run_summarizer_extended(retriever_fn):
+def run_summarizer_extended(retriever_fn, domain="General"):
     """
     Fetch chunks via retriever_fn for each grant section and return
     a complete structured summary JSON with:
@@ -73,6 +73,10 @@ def run_summarizer_extended(retriever_fn):
     - pages
     - references
     - notes
+    
+    Args:
+        retriever_fn: Function to retrieve relevant documents
+        domain: The academic/research domain for context (default: "General")
     """
     context_text = ""
     
@@ -96,8 +100,8 @@ def run_summarizer_extended(retriever_fn):
     if not context_text:
         return {}
 
-    # Prepare full prompt
-    prompt = SUMMARY_PROMPT.format(context=context_text)
+    # Prepare full prompt with domain context
+    prompt = SUMMARY_PROMPT.format(context=context_text, domain=domain)
 
     # Call Gemini LLM
     response = gemini_llm(prompt)

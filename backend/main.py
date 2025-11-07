@@ -3,14 +3,15 @@ FastAPI Backend for Grant Evaluator
 Supports file upload, grant evaluation pipeline, and MongoDB Atlas storage
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from typing import List, Optional
+from contextlib import asynccontextmanager
 import os
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,11 +21,36 @@ from database import get_database
 import database
 from evaluation_pipeline import run_full_evaluation
 from src.agents.pdf_generator import generate_evaluation_report_pdf
+from src.agents.domain_selection import get_all_domains
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle startup and shutdown events"""
+    # Startup
+    from database import connect_to_mongo
+    try:
+        await connect_to_mongo()
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print(f"❌ CRITICAL ERROR: MongoDB connection failed!")
+        print(f"{'='*60}")
+        print(f"Error: {e}")
+        print(f"\n💡 Solution: Check QUICKFIX_MONGODB.md for instructions")
+        print(f"{'='*60}\n")
+    
+    yield
+    
+    # Shutdown
+    from database import close_mongo_connection
+    await close_mongo_connection()
+
 
 app = FastAPI(
     title="Grant Evaluator API",
     description="AI-powered grant proposal evaluation system",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS middleware for frontend
@@ -41,28 +67,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup"""
-    from database import connect_to_mongo
-    try:
-        await connect_to_mongo()
-    except Exception as e:
-        print(f"\n{'='*60}")
-        print(f"❌ CRITICAL ERROR: MongoDB connection failed!")
-        print(f"{'='*60}")
-        print(f"Error: {e}")
-        print(f"\n💡 Solution: Check QUICKFIX_MONGODB.md for instructions")
-        print(f"{'='*60}\n")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connection on shutdown"""
-    from database import close_mongo_connection
-    await close_mongo_connection()
 
 
 @app.get("/")
@@ -87,14 +91,27 @@ async def root():
     }
 
 
+@app.get("/api/domains")
+async def get_domains():
+    """Get list of all available domains for dropdown selection"""
+    return {"domains": get_all_domains()}
+
+
 @app.post("/api/evaluations", response_model=EvaluationResponse)
 async def create_evaluation(
     file: UploadFile = File(...),
+    domain: Optional[str] = Form(None),
+    check_plagiarism: bool = Form(False),
     db=Depends(get_database)
 ):
     """
     Upload and evaluate a grant proposal (PDF or DOCX)
     Returns comprehensive evaluation with scores, critique, and budget analysis
+    
+    Args:
+        file: Grant proposal file (PDF or DOCX)
+        domain: Optional user-specified domain (overrides auto-detection)
+        check_plagiarism: Whether to run plagiarism detection
     """
     
     # Validate file type
@@ -117,10 +134,12 @@ async def create_evaluation(
         tmp_file_path = tmp_file.name
     
     try:
-        # Run evaluation pipeline
+        # Run evaluation pipeline with optional domain override and plagiarism check
         evaluation_result = run_full_evaluation(
             file_path=tmp_file_path,
-            max_budget=max_budget
+            max_budget=max_budget,
+            override_domain=domain,
+            check_plagiarism=check_plagiarism
         )
         
         # Prepare document for MongoDB
@@ -129,13 +148,16 @@ async def create_evaluation(
             "file_size": len(content),
             "decision": evaluation_result["decision"],
             "overall_score": evaluation_result["overall_score"],
+            "domain": evaluation_result.get("domain", "Unknown"),
             "scores": evaluation_result["scores"],
-            "critique_domains": evaluation_result["critique_domains"],
+            "critique_domains": evaluation_result.get("critique_domains", []),
             "section_scores": evaluation_result["section_scores"],
             "full_critique": evaluation_result["full_critique"],
             "budget_analysis": evaluation_result["budget_analysis"],
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "summary": evaluation_result.get("summary", {}),
+            "plagiarism_check": evaluation_result.get("plagiarism_check"),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
         }
         
         # Insert into MongoDB
@@ -247,13 +269,13 @@ async def get_settings(db=Depends(get_database)):
         return {
             "max_budget": 50000,
             "chunk_size": 1000,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
     
     settings["id"] = str(settings["_id"])
-    settings["created_at"] = settings.get("created_at", datetime.utcnow()).isoformat()
-    settings["updated_at"] = settings.get("updated_at", datetime.utcnow()).isoformat()
+    settings["created_at"] = settings.get("created_at", datetime.now(timezone.utc)).isoformat()
+    settings["updated_at"] = settings.get("updated_at", datetime.now(timezone.utc)).isoformat()
     
     return settings
 
@@ -267,7 +289,7 @@ async def update_settings(settings: SettingsModel, db=Depends(get_database)):
     settings_dict = {
         "max_budget": settings.max_budget,
         "chunk_size": settings.chunk_size,
-        "updated_at": datetime.utcnow()
+        "updated_at": datetime.now(timezone.utc)
     }
     
     if existing:
@@ -277,10 +299,10 @@ async def update_settings(settings: SettingsModel, db=Depends(get_database)):
             {"$set": settings_dict}
         )
         settings_dict["id"] = str(existing["_id"])
-        settings_dict["created_at"] = existing.get("created_at", datetime.utcnow())
+        settings_dict["created_at"] = existing.get("created_at", datetime.now(timezone.utc))
     else:
         # Create new settings
-        settings_dict["created_at"] = datetime.utcnow()
+        settings_dict["created_at"] = datetime.now(timezone.utc)
         result = await database.settings_collection.insert_one(settings_dict)
         settings_dict["id"] = str(result.inserted_id)
     

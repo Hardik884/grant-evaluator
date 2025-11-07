@@ -11,7 +11,7 @@ def strip_codeblock(text: str) -> str:
     return re.sub(r"^```(?:json)?\n|```$", "", text.strip(), flags=re.MULTILINE)
 
 
-def run_grant_critique(scorer_json, summaries_json=None):
+def run_grant_critique(scorer_json, summaries_json=None, domain="General"):
     """
     Pass the Scorer Agent's JSON output (and optionally Summary Agent output)
     to Gemini LLM for a comprehensive multi-domain critique.
@@ -31,6 +31,8 @@ def run_grant_critique(scorer_json, summaries_json=None):
         The structured output from the Scorer Agent, including scores, strengths, and weaknesses.
     summaries_json : dict, optional
         The structured summaries from the Summary Agent for deeper context.
+    domain : str, optional
+        The academic/research domain for context (default: "General")
 
     Returns
     -------
@@ -47,8 +49,8 @@ def run_grant_critique(scorer_json, summaries_json=None):
     # Convert to string for prompt formatting
     input_json_str = json.dumps(combined_input, indent=2)
 
-    # Prepare the full prompt
-    prompt = MASTER_CRITIQUE_PROMPT.format(input_json=input_json_str)
+    # Prepare the full prompt with domain context
+    prompt = MASTER_CRITIQUE_PROMPT.format(input_json=input_json_str, domain=domain)
 
     # Call Gemini LLM
     response = gemini_llm(prompt)

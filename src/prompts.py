@@ -264,12 +264,16 @@ You are provided the following:
 - Structured summary of the proposal
 - Section-level scores and evaluations
 - Budget evaluation results
+- Critique analysis
 - And the **final weighted score**, already calculated by the evaluation engine: {final_weighted_score}
+
+### INPUT DATA:
+{data}
 
 ### IMPORTANT:
 - **DO NOT** recalculate or change the score.
 - **DO NOT** average, reinterpret, or modify section scores.
-- Use `final_weighted_score` exactly as given.
+- Use `final_weighted_score` ({final_weighted_score}) exactly as given.
 
 ### DECISION RULES (STRICT):
 - If final_weighted_score ≥ 8.0 → **ACCEPT**
@@ -280,14 +284,14 @@ You are provided the following:
 Write a professional, concise justification referencing meaningful strengths and weaknesses.
 
 ### OUTPUT FORMAT (STRICT JSON):
-{
+{{
   "final_score": {final_weighted_score},
   "decision": "ACCEPT" | "CONDITIONALLY ACCEPT" | "REJECT",
   "rationale": "Short paragraph explaining the decision.",
   "key_strengths": [str, ...],
   "key_weaknesses": [str, ...],
   "next_steps": "One clear recommendation for improvement."
-}
+}}
 
 ### Output Rules:
 - Return **only the JSON object**.
@@ -325,6 +329,66 @@ Proposal Text:
 {context}
 """
 
+
+BUDGET_PROMPT = """
+You are an expert budget analyst specializing in **{domain}** research grants.
+
+Analyze the following budget information from a grant proposal and provide a comprehensive evaluation.
+
+### Budget Information:
+{budget_json}
+
+### Maximum Allowed Budget: ${max_budget}
+
+### CRITICAL INSTRUCTIONS:
+1. Extract ALL budget-related numbers, categories, and line items from the provided text
+2. Look for budget tables, cost breakdowns, personnel costs, equipment, materials, travel, etc.
+3. If you find budget information, calculate the totalBudget by summing all line items
+4. For each budget category, provide the amount (in dollars) and percentage of total
+5. ALL amounts and percentages MUST be numbers (e.g., 5000.0, 25.5), NEVER use text like "Unclear" or "TBD"
+6. If a value is truly unclear, use 0.0 instead of text
+
+### Your Analysis Must Include:
+
+1. **Budget Breakdown Extraction**:
+   - Extract every budget line item with its dollar amount
+   - Calculate percentage of total for each category
+   - Common categories: Personnel, Equipment, Materials, Travel, Indirect Costs, Other
+
+2. **Cost-Effectiveness Analysis**:
+   - Assess if the budget is appropriate for the proposed work
+   - Identify potential over-budgeting or under-budgeting
+   - Compare against typical {domain} project costs
+
+3. **Compliance Check**:
+   - Verify if total budget is within the maximum allowed (${max_budget})
+   - Check for required budget categories for {domain} research
+   - Flag any budget items that seem inappropriate
+
+4. **Risk Assessment**:
+   - Identify budget-related risks
+   - Flag any red flags or concerns
+   - Suggest budget optimizations if needed
+
+### Output Format (STRICT JSON - all amounts MUST be numbers):
+{{
+  "totalBudget": <number_only>,
+  "breakdown": [
+    {{"category": "<name>", "amount": <number_only>, "percentage": <number_only>}}
+  ],
+  "flags": [
+    {{"type": "warning|error|info", "message": "<description>"}}
+  ],
+  "summary": "<overall assessment>"
+}}
+
+IMPORTANT: 
+- amount and percentage MUST be numeric values (float or int), NEVER strings
+- If uncertain about a value, use 0.0 (zero) instead of text
+- Extract actual dollar amounts from the budget text (e.g., "$5,000" becomes 5000.0)
+
+Return **only valid JSON**, no additional text.
+"""
 
 
 PDF_FORMAT_PROMPT = """

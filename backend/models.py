@@ -17,7 +17,7 @@ class ScoreDetail(BaseModel):
 
 class CritiqueDomain(BaseModel):
     domain: str
-    score: int
+    score: float  # Changed from int to float for decimal precision
 
 
 class SectionScore(BaseModel):
@@ -28,11 +28,13 @@ class SectionScore(BaseModel):
 class CritiqueIssue(BaseModel):
     severity: Literal["high", "medium", "low"]
     category: str
+    domain: Optional[str] = None  # Added for domain filtering
     description: str
 
 
 class CritiqueRecommendation(BaseModel):
     priority: Literal["high", "medium", "low"]
+    domain: Optional[str] = None  # Added for domain filtering
     recommendation: str
 
 
@@ -60,16 +62,26 @@ class BudgetAnalysis(BaseModel):
     summary: str
 
 
+class PlagiarismCheck(BaseModel):
+    similarity_score: Optional[float] = None
+    matched_reference_text: Optional[str] = None
+    risk_level: Literal["HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    error: Optional[str] = None
+
+
 class EvaluationCreate(BaseModel):
     file_name: str
     file_size: int
     decision: Literal["ACCEPT", "REJECT", "REVISE", "CONDITIONALLY ACCEPT"]
     overall_score: float
+    domain: str
     scores: List[ScoreDetail]
     critique_domains: List[CritiqueDomain]
     section_scores: List[SectionScore]
     full_critique: FullCritique
     budget_analysis: BudgetAnalysis
+    summary: Optional[dict] = None
+    plagiarism_check: Optional[PlagiarismCheck] = None
 
 
 class EvaluationResponse(EvaluationCreate):

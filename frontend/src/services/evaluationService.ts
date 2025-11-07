@@ -4,9 +4,13 @@ import type { Evaluation, Settings } from '../types/evaluation';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 export const evaluationService = {
-  async saveEvaluation(file: File): Promise<Evaluation> {
+  async saveEvaluation(file: File, domain?: string, checkPlagiarism: boolean = false): Promise<Evaluation> {
     const formData = new FormData();
     formData.append('file', file);
+    if (domain) {
+      formData.append('domain', domain);
+    }
+    formData.append('check_plagiarism', checkPlagiarism.toString());
 
     const response = await fetch(`${API_BASE_URL}/evaluations`, {
       method: 'POST',
@@ -19,6 +23,17 @@ export const evaluationService = {
     }
 
     return await response.json();
+  },
+
+  async getDomains(): Promise<string[]> {
+    const response = await fetch(`${API_BASE_URL}/domains`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch domains');
+    }
+
+    const data = await response.json();
+    return data.domains;
   },
 
   async getEvaluations(): Promise<Evaluation[]> {

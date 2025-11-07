@@ -1,6 +1,6 @@
-import { useState, useRef, DragEvent } from 'react';
+import { useState, useRef, DragEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText, X, Brain, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/Button';
 import { LoadingAnimation } from '../components/LoadingAnimation';
 import { evaluationService } from '../services/evaluationService';
@@ -9,8 +9,17 @@ export function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState<string>('');
+  const [checkPlagiarism, setCheckPlagiarism] = useState(false);
+  const [useAutoDomain, setUseAutoDomain] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Fetch available domains on component mount
+    evaluationService.getDomains().then(setDomains).catch(console.error);
+  }, []);
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -50,8 +59,9 @@ export function Home() {
     setIsEvaluating(true);
 
     try {
-      // Upload file directly to backend for evaluation
-      const saved = await evaluationService.saveEvaluation(file);
+      // Upload file with optional domain override and plagiarism check
+      const domain = useAutoDomain ? undefined : selectedDomain;
+      const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism);
       navigate(`/results/${saved.id}`);
     } catch (error) {
       console.error('Evaluation failed:', error);
@@ -140,6 +150,58 @@ export function Home() {
                     <X className="w-5 h-5 text-gray-400 hover:text-error" />
                   </button>
                 </div>
+
+                {/* Domain Selection */}
+                <div className="space-y-3 p-4 bg-charcoal-900/50 rounded-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Brain className="w-5 h-5 text-accent-purple" />
+                    <h3 className="font-semibold text-gray-200">Domain Classification</h3>
+                  </div>
+                  
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useAutoDomain}
+                      onChange={(e) => setUseAutoDomain(e.target.checked)}
+                      className="w-4 h-4 text-accent-purple bg-charcoal-800 border-charcoal-700 rounded focus:ring-accent-purple focus:ring-2"
+                    />
+                    <span className="text-sm text-gray-300">Auto-detect domain using AI</span>
+                  </label>
+
+                  {!useAutoDomain && (
+                    <select
+                      value={selectedDomain}
+                      onChange={(e) => setSelectedDomain(e.target.value)}
+                      className="w-full px-4 py-2 bg-charcoal-800 border border-charcoal-700 rounded-lg text-gray-200 focus:outline-none focus:border-accent-purple"
+                    >
+                      <option value="">Select a domain...</option>
+                      {domains.map((domain) => (
+                        <option key={domain} value={domain}>
+                          {domain}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Plagiarism Check */}
+                <div className="space-y-3 p-4 bg-charcoal-900/50 rounded-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldCheck className="w-5 h-5 text-accent-magenta" />
+                    <h3 className="font-semibold text-gray-200">Additional Checks</h3>
+                  </div>
+                  
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checkPlagiarism}
+                      onChange={(e) => setCheckPlagiarism(e.target.checked)}
+                      className="w-4 h-4 text-accent-magenta bg-charcoal-800 border-charcoal-700 rounded focus:ring-accent-magenta focus:ring-2"
+                    />
+                    <span className="text-sm text-gray-300">Run plagiarism detection</span>
+                  </label>
+                </div>
+
                 <Button onClick={handleEvaluate} className="w-full" size="lg">
                   Evaluate Grant
                 </Button>

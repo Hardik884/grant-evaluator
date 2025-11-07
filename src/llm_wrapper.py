@@ -1,6 +1,7 @@
 # src/llm_wrapper.py
 import os
 import logging
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -50,10 +51,37 @@ def gemini_llm(prompt: str,
         "candidate_count": int(candidate_count)
     }
 
-    try:
-        response = model.generate_content(prompt, **kwargs)
-    except TypeError:
-        response = model.generate_content(prompt)
+    # Retry logic for transient API errors
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt, **kwargs)
+            break  # Success, exit retry loop
+        except TypeError:
+            response = model.generate_content(prompt)
+            break
+        except Exception as e:
+            error_msg = str(e)
+            is_retryable = "500" in error_msg or "Internal" in error_msg or "ResourceExhausted" in error_msg
+            
+            if is_retryable and attempt < max_retries - 1:
+                print(f"[WARNING] API error on attempt {attempt + 1}/{max_retries}: {error_msg}")
+                print(f"[INFO] Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                # Enhanced error reporting for final failure
+                if "500" in error_msg or "Internal" in error_msg:
+                    print(f"[ERROR] Gemini API returned 500 error after {max_retries} attempts.")
+                    print("  Possible causes:")
+                    print("  - Rate limiting (too many requests)")
+                    print("  - Input content too large")
+                    print("  - Temporary API outage")
+                    print(f"  - Prompt length: {len(prompt)} characters")
+                raise
 
     text = None
     if hasattr(response, 'text'):
