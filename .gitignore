@@ -59,9 +59,6 @@ faiss_index/
 # --------------------
 .env
 .env.*
-*.json
-*.yaml
-*.yml
 
 # --------------------
 # Editors & OS
