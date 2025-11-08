@@ -7,7 +7,7 @@ import {
   Title,
   Tooltip,
   Legend,
-  ChartOptions
+  ChartOptions,
 } from 'chart.js';
 import type { SectionScore } from '../../types/evaluation';
 
@@ -31,11 +31,11 @@ export function BarChartComponent({ data }: BarChartProps) {
       {
         label: 'Score',
         data: data.map(d => d.score),
-        backgroundColor: 'rgba(139, 92, 246, 0.8)',
-        borderColor: 'rgba(236, 72, 153, 1)',
-        borderWidth: 2,
-        borderRadius: 8,
-        hoverBackgroundColor: 'rgba(236, 72, 153, 0.8)',
+        backgroundColor: 'rgba(99, 102, 241, 0.35)',
+        borderColor: 'rgba(99, 102, 241, 0.85)',
+        borderWidth: 1.5,
+        borderRadius: 6,
+        hoverBackgroundColor: 'rgba(99, 102, 241, 0.55)',
       },
     ],
   };
@@ -43,27 +43,38 @@ export function BarChartComponent({ data }: BarChartProps) {
   const options: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        left: 8,
+        right: 8,
+        top: 16,
+        bottom: 8,
+      },
+    },
     scales: {
       y: {
         beginAtZero: true,
         max: 10,
         ticks: {
           stepSize: 2,
-          color: '#9CA3AF',
-        },
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)',
-        },
-      },
-      x: {
-        ticks: {
-          color: '#D1D5DB',
+          color: 'rgba(148, 163, 184, 0.9)',
           font: {
             size: 11,
           },
         },
         grid: {
+          color: 'rgba(148, 163, 184, 0.12)',
+        },
+      },
+      x: {
+        grid: {
           display: false,
+        },
+        ticks: {
+          color: 'rgba(226, 232, 240, 0.9)',
+          font: {
+            size: 11,
+          },
         },
       },
     },
@@ -72,22 +83,25 @@ export function BarChartComponent({ data }: BarChartProps) {
         display: false,
       },
       tooltip: {
-        backgroundColor: '#1C2128',
-        titleColor: '#F3F4F6',
-        bodyColor: '#D1D5DB',
-        borderColor: '#22272E',
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        titleColor: '#E2E8F0',
+        bodyColor: '#F8FAFC',
+        borderColor: 'rgba(71, 85, 105, 0.6)',
         borderWidth: 1,
-        padding: 12,
+        padding: 10,
         displayColors: false,
         callbacks: {
-          label: (context) => `Score: ${context.parsed.y.toFixed(1)}/10`,
+          label: (context) => {
+            const value = typeof context.parsed.y === 'number' ? context.parsed.y : 0;
+            return `Score: ${value.toFixed(1)}/10`;
+          },
         },
       },
     },
   };
 
   return (
-    <div className="w-full h-[400px]">
+    <div className="h-[320px] w-full">
       <Bar data={chartData} options={options} />
     </div>
   );

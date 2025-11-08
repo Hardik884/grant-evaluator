@@ -7,7 +7,7 @@ import {
   Filler,
   Tooltip,
   Legend,
-  ChartOptions
+  ChartOptions,
 } from 'chart.js';
 import type { CritiqueDomain } from '../../types/evaluation';
 
@@ -31,39 +31,43 @@ export function RadarChartComponent({ data }: RadarChartProps) {
       {
         label: 'Score',
         data: data.map(d => d.score),
-        backgroundColor: 'rgba(139, 92, 246, 0.2)',
-        borderColor: 'rgba(139, 92, 246, 1)',
-        borderWidth: 2,
-        pointBackgroundColor: 'rgba(236, 72, 153, 1)',
-        pointBorderColor: '#fff',
-        pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: 'rgba(236, 72, 153, 1)',
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+        borderColor: 'rgba(99, 102, 241, 0.8)',
+        borderWidth: 1.5,
+        pointBackgroundColor: 'rgba(236, 233, 252, 0.95)',
+        pointBorderColor: 'rgba(99, 102, 241, 0.8)',
+        pointHoverBackgroundColor: 'rgba(99, 102, 241, 1)',
+        pointHoverBorderColor: '#F8FAFC',
+        pointRadius: 4,
+        pointHoverRadius: 6,
       },
     ],
   };
 
   const options: ChartOptions<'radar'> = {
     responsive: true,
-    maintainAspectRatio: true,
+    maintainAspectRatio: false,
     scales: {
       r: {
         beginAtZero: true,
         max: 10,
+        angleLines: {
+          color: 'rgba(148, 163, 184, 0.12)',
+        },
         ticks: {
           stepSize: 2,
-          color: '#9CA3AF',
+          color: 'rgba(148, 163, 184, 0.9)',
           backdropColor: 'transparent',
+          showLabelBackdrop: false,
         },
         grid: {
-          color: 'rgba(255, 255, 255, 0.1)',
+          color: 'rgba(148, 163, 184, 0.12)',
         },
         pointLabels: {
-          color: '#D1D5DB',
+          color: 'rgba(226, 232, 240, 0.92)',
           font: {
             size: 12,
-            weight: '500',
+            weight: 500,
           },
         },
       },
@@ -81,14 +85,17 @@ export function RadarChartComponent({ data }: RadarChartProps) {
         padding: 12,
         displayColors: false,
         callbacks: {
-          label: (context) => `Score: ${context.parsed.r.toFixed(1)}/10`,
+          label: (context) => {
+            const value = typeof context.parsed.r === 'number' ? context.parsed.r : 0;
+            return `Score: ${value.toFixed(1)}/10`;
+          },
         },
       },
     },
   };
 
   return (
-    <div className="w-full h-[400px] flex items-center justify-center">
+    <div className="flex h-[320px] w-full items-center justify-center">
       <Radar data={chartData} options={options} />
     </div>
   );

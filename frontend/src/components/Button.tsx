@@ -20,14 +20,14 @@ export function Button({
 
   const variantStyles = {
     gradient: 'btn-gradient',
-    outline: 'border-2 border-accent-purple text-accent-purple hover:bg-accent-purple hover:text-white',
-    ghost: 'text-gray-300 hover:bg-charcoal-700 hover:text-white'
+    outline: 'border border-white/15 text-slate-200/90 hover:bg-white/10 hover:text-white',
+    ghost: 'btn-ghost'
   };
 
   const sizeStyles = {
-    sm: 'py-2 px-4 text-sm',
+    sm: 'py-2.5 px-4 text-sm',
     md: 'py-3 px-6 text-base',
-    lg: 'py-4 px-8 text-lg'
+    lg: 'py-3.5 px-8 text-lg'
   };
 
   return (

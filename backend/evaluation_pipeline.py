@@ -5,6 +5,8 @@ Orchestrates the full evaluation process from document loading to final decision
 
 import sys
 import os
+from datetime import datetime
+from typing import Any, Callable, Dict, Optional
 
 # Allow `src/...` imports when executed as script
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -20,8 +22,27 @@ from src.agents.budget_agent import run_budget_agent
 from src.agents.decision import run_final_decision_agent
 from src.llm_wrapper import set_deterministic_mode
 
+StatusCallback = Optional[Callable[[Dict[str, Any]], None]]
 
-def run_full_evaluation(file_path: str, max_budget: float = 50000, override_domain: str = None, check_plagiarism: bool = False):
+PIPELINE_STAGES = [
+    {"key": "document_ingest", "label": "Parsing document and detecting sections"},
+    {"key": "domain_detection", "label": "Identifying research domain context"},
+    {"key": "summarisation", "label": "Summarising narrative and metadata"},
+    {"key": "scoring", "label": "Scoring against rubric benchmarks"},
+    {"key": "critique", "label": "Reviewing critique and risk signals"},
+    {"key": "budget", "label": "Auditing budget structure and anomalies"},
+    {"key": "compliance", "label": "Validating compliance and plagiarism scan"},
+    {"key": "finalisation", "label": "Compiling final recommendation package"},
+]
+
+
+def run_full_evaluation(
+    file_path: str,
+    max_budget: float = 50000,
+    override_domain: str = None,
+    check_plagiarism: bool = False,
+    status_callback: StatusCallback = None,
+):
     """
     Run complete adaptive grant evaluation pipeline.
 
@@ -29,11 +50,51 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
         file_path: Path to the grant proposal file (PDF/DOCX)
         max_budget: Maximum allowed requested budget
         override_domain: Optional domain override by user (bypasses auto-detection)
-        check_plagiarism: Whether to run plagiarism detection
+    check_plagiarism: Whether to run plagiarism detection
+    status_callback: Optional callable receiving structured stage updates
 
     Returns:
         dict: structured evaluation result for frontend
     """
+
+    total_stages = len(PIPELINE_STAGES)
+
+    def emit_stage(stage_index: int, status: str, message: Optional[str] = None, progress_override: Optional[int] = None) -> None:
+        if status_callback is None:
+            return
+
+        try:
+            stage_meta = PIPELINE_STAGES[stage_index]
+            stage_key = stage_meta["key"]
+            stage_label = stage_meta["label"]
+        except IndexError:
+            stage_key = f"stage-{stage_index}"
+            stage_label = "Pipeline"
+
+        if progress_override is None:
+            if status == "started":
+                progress_value = max(0, min(99, int((stage_index / total_stages) * 100)))
+            else:
+                progress_value = max(1, min(100, int(((stage_index + 1) / total_stages) * 100)))
+        else:
+            progress_value = max(0, min(100, progress_override))
+
+        payload = {
+            "event": "status",
+            "stage_index": stage_index,
+            "stage_key": stage_key,
+            "label": stage_label,
+            "status": status,
+            "progress": progress_value,
+            "message": message or stage_label,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+        try:
+            status_callback(payload)
+        except Exception:
+            # Callback errors should not break the evaluation pipeline
+            pass
 
     # Make evaluation deterministic to remove LLM randomness
     try:
@@ -42,13 +103,16 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
         pass
 
     # Step 1 — Extract text pages
+    emit_stage(0, "started", "Extracting proposal pages")
     print(f"[INFO] Loading document: {file_path}")
     pages = input_agent(file_path)
     if not pages:
         raise ValueError("Document extraction failed.")
     print(f"[INFO] Loaded {len(pages)} pages")
+    emit_stage(0, "completed", f"Loaded {len(pages)} pages")
 
     # Step 2 — Build vectorstore fresh each run (avoid cross-proposal contamination)
+    emit_stage(1, "started", "Building semantic index and preparing domain detection")
     print("[INFO] Creating in-memory vectorstore...")
     # Get config path relative to the project root
     config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
@@ -58,18 +122,24 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
     if override_domain:
         print(f"[INFO] Using user-specified domain → {override_domain}")
         domain = override_domain
+        emit_stage(1, "completed", f"Domain locked to {domain}")
     else:
         print("[INFO] Detecting academic / research domain...")
         domain = classify_domain(" ".join([p.page_content for p in pages]))
         print(f"[INFO] Domain Detected → {domain}")
+        emit_stage(1, "completed", f"Detected domain: {domain}")
 
     # Step 4 — Structured summarization (section-wise) with domain context
+    emit_stage(2, "started", "Generating structured summary")
     print("[INFO] Generating structured summary...")
     summary = run_summarizer_extended(vs["ask"], domain=domain)
+    emit_stage(2, "completed", "Summary generated")
 
     # Step 5 — Scoring (raw, before weighting)
+    emit_stage(3, "started", "Scoring proposal against rubric")
     print("[INFO] Running scoring agent...")
     scores = run_grant_scoring(summary, domain)
+    emit_stage(3, "completed", "Section scores computed")
 
     # Step 6 — Apply adaptive weighting model
     print("[INFO] Computing weighted score...")
@@ -77,14 +147,17 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
     print(f"[INFO] Weighted Score = {final_weighted_score}")
 
     # Step 7 — Critique (uses scoring, does NOT modify score)
+    emit_stage(4, "started", "Generating critique and risk analysis")
     print("[INFO] Generating critique...")
     critique = run_grant_critique(
         scorer_json=scores,
         summaries_json=summary,
         domain=domain
     )
+    emit_stage(4, "completed", "Critique ready")
 
     # Step 8 — Budget analysis
+    emit_stage(5, "started", "Evaluating budget structure")
     print("[INFO] Evaluating budget...")
     
     # Try to extract budget more aggressively
@@ -122,6 +195,8 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
         for keyword in ["budget", "cost", "$", "expense", "funding", "financial"]
     )
     
+    budget_stage_message = "Budget analysis complete"
+
     if not has_budget_info:
         print("[WARNING] No substantial budget information found in proposal")
         budget_evaluation = {
@@ -133,6 +208,7 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
             }],
             "summary": "The proposal does not contain a detailed budget section. Budget information may be missing or in a separate document."
         }
+        budget_stage_message = "Budget information unavailable; issued warning"
     else:
         budget_evaluation = run_budget_agent(
             budget_input,
@@ -197,7 +273,37 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
         elif budget_evaluation.get("totalBudget") is None:
             budget_evaluation["totalBudget"] = 0.0
 
-    # Step 9 — Final decision (uses weighted score, does NOT recalc score)
+        budget_stage_message = f"Budget analysis complete (total ${budget_evaluation['totalBudget']:.2f})"
+
+    emit_stage(5, "completed", budget_stage_message)
+
+    # Step 9 — Compliance and optional plagiarism check
+    emit_stage(6, "started", "Running compliance checks")
+    plagiarism_result = None
+    compliance_message = "Compliance checks completed"
+    if check_plagiarism:
+        print("[INFO] Running plagiarism detection...")
+        try:
+            from src.plagiarism.plagiarism_detector import detect_plagiarism
+            full_text = " ".join([p.page_content for p in pages])
+            plagiarism_result = detect_plagiarism(full_text)
+            risk_level = plagiarism_result.get("risk_level", "UNKNOWN")
+            print(f"[INFO] Plagiarism Risk Level → {risk_level}")
+            compliance_message = f"Plagiarism check completed (risk {risk_level})"
+        except Exception as e:
+            print(f"[WARNING] Plagiarism check failed: {str(e)}")
+            plagiarism_result = {
+                "error": str(e),
+                "risk_level": "UNKNOWN"
+            }
+            compliance_message = "Plagiarism check encountered an error"
+    else:
+        compliance_message = "Plagiarism scan skipped (disabled)"
+
+    emit_stage(6, "completed", compliance_message)
+
+    # Step 10 — Final decision (uses weighted score, does NOT recalc score)
+    emit_stage(7, "started", "Compiling final recommendation package")
     print("[INFO] Finalizing decision...")
     final_decision = run_final_decision_agent(
         summary_json=summary,
@@ -208,27 +314,15 @@ def run_full_evaluation(file_path: str, max_budget: float = 50000, override_doma
         domain=domain
     )
 
-    # Step 10 — Plagiarism check (optional)
-    plagiarism_result = None
-    if check_plagiarism:
-        print("[INFO] Running plagiarism detection...")
-        try:
-            from src.plagiarism.plagiarism_detector import detect_plagiarism
-            full_text = " ".join([p.page_content for p in pages])
-            plagiarism_result = detect_plagiarism(full_text)
-            print(f"[INFO] Plagiarism Risk Level → {plagiarism_result.get('risk_level', 'UNKNOWN')}")
-        except Exception as e:
-            print(f"[WARNING] Plagiarism check failed: {str(e)}")
-            plagiarism_result = {
-                "error": str(e),
-                "risk_level": "UNKNOWN"
-            }
-
-    # Done — format into frontend-ready shape
-    return format_evaluation_response(
-        summary, scores, critique, budget_evaluation, final_decision, 
+    response = format_evaluation_response(
+        summary, scores, critique, budget_evaluation, final_decision,
         final_weighted_score, domain, plagiarism_result
     )
+
+    emit_stage(7, "completed", f"Recommendation ready ({response.get('decision', 'UNKNOWN')})")
+
+    # Done — format into frontend-ready shape
+    return response
 
 
 def format_evaluation_response(summary, scores, critique, budget_eval, decision, final_weighted_score, domain, plagiarism_result=None):
@@ -248,6 +342,14 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
 
     for section_name, section_data in scores.get("scores", {}).items():
         formatted_name = format_section_name(section_name)
+        raw_strengths = section_data.get("strengths")
+        strengths = raw_strengths if isinstance(raw_strengths, list) and raw_strengths else [
+            "No standout strengths recorded."
+        ]
+        raw_weaknesses = section_data.get("weaknesses")
+        weaknesses = raw_weaknesses if isinstance(raw_weaknesses, list) and raw_weaknesses else [
+            "No critical weaknesses identified."
+        ]
         section_scores.append({
             "section": formatted_name,
             "score": section_data.get("score", 0)
@@ -256,13 +358,16 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
             "category": formatted_name,
             "score": section_data.get("score", 0),
             "maxScore": 10,
-            "strengths": section_data.get("strengths", []),
-            "weaknesses": section_data.get("weaknesses", [])
+            "strengths": strengths,
+            "weaknesses": weaknesses
         })
 
     # Transform critique structure to match FullCritique model
+    overall_feedback = critique.get("overall_feedback") if isinstance(critique, dict) else None
+    if not isinstance(overall_feedback, str) or not overall_feedback.strip():
+        overall_feedback = "No executive summary was generated."
     formatted_critique = {
-        "summary": critique.get("overall_feedback", "No overall feedback provided."),
+        "summary": overall_feedback,
         "issues": [],
         "recommendations": []
     }

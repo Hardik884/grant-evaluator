@@ -3,10 +3,12 @@ FastAPI Backend for Grant Evaluator
 Supports file upload, grant evaluation pipeline, and MongoDB Atlas storage
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
+import asyncio
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
 import os
 import sys
@@ -22,6 +24,7 @@ import database
 from evaluation_pipeline import run_full_evaluation
 from src.agents.pdf_generator import generate_evaluation_report_pdf
 from src.agents.domain_selection import get_all_domains
+from websocket_manager import websocket_manager
 
 
 @asynccontextmanager
@@ -97,11 +100,32 @@ async def get_domains():
     return {"domains": get_all_domains()}
 
 
+@app.websocket("/ws/evaluation/{session_id}")
+async def evaluation_status_socket(websocket: WebSocket, session_id: str):
+    """Stream live evaluation status updates to connected clients."""
+
+    await websocket_manager.connect(session_id, websocket)
+    try:
+        await websocket.send_json({
+            "event": "connected",
+            "session_id": session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        while True:
+            # Keep the connection alive; we do not expect client messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await websocket_manager.disconnect(session_id, websocket)
+    except Exception:
+        await websocket_manager.disconnect(session_id, websocket)
+
+
 @app.post("/api/evaluations", response_model=EvaluationResponse)
 async def create_evaluation(
     file: UploadFile = File(...),
     domain: Optional[str] = Form(None),
     check_plagiarism: bool = Form(False),
+    session_id: Optional[str] = Form(None),
     db=Depends(get_database)
 ):
     """
@@ -133,15 +157,47 @@ async def create_evaluation(
         tmp_file.write(content)
         tmp_file_path = tmp_file.name
     
-    try:
-        # Run evaluation pipeline with optional domain override and plagiarism check
-        evaluation_result = run_full_evaluation(
-            file_path=tmp_file_path,
-            max_budget=max_budget,
-            override_domain=domain,
-            check_plagiarism=check_plagiarism
+    loop = asyncio.get_running_loop()
+
+    def _consume_future(fut: asyncio.Future) -> None:
+        try:
+            fut.result()
+        except Exception:
+            pass
+
+    def queue_status(payload: Dict[str, Any]) -> None:
+        if not session_id:
+            return
+        future = asyncio.run_coroutine_threadsafe(
+            websocket_manager.send(session_id, payload),
+            loop
         )
-        
+        future.add_done_callback(_consume_future)
+
+    if session_id:
+        await websocket_manager.send(session_id, {
+            "event": "status",
+            "stage_index": -1,
+            "stage_key": "queued",
+            "label": "Preparing evaluation",
+            "status": "queued",
+            "progress": 0,
+            "message": "Preparing evaluation pipeline...",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    try:
+        def run_pipeline() -> Dict[str, Any]:
+            return run_full_evaluation(
+                file_path=tmp_file_path,
+                max_budget=max_budget,
+                override_domain=domain,
+                check_plagiarism=check_plagiarism,
+                status_callback=queue_status if session_id else None,
+            )
+
+        evaluation_result = await loop.run_in_executor(None, run_pipeline)
+
         # Prepare document for MongoDB
         evaluation_doc = {
             "file_name": file.filename,
@@ -159,22 +215,37 @@ async def create_evaluation(
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc)
         }
-        
+
         # Insert into MongoDB
         result = await database.evaluations_collection.insert_one(evaluation_doc)
         evaluation_doc["id"] = str(result.inserted_id)
         evaluation_doc["_id"] = str(result.inserted_id)
-        
+
         # Convert datetime to ISO string for JSON response
         evaluation_doc["created_at"] = evaluation_doc["created_at"].isoformat()
         evaluation_doc["updated_at"] = evaluation_doc["updated_at"].isoformat()
-        
+
+        if session_id:
+            await websocket_manager.send(session_id, {
+                "event": "complete",
+                "evaluation_id": evaluation_doc["id"],
+                "decision": evaluation_doc["decision"],
+                "progress": 100,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+
         return evaluation_doc
-        
+
     except Exception as e:
         import traceback
         print("[ERROR] Exception in /api/evaluations:", str(e))
         traceback.print_exc()
+        if session_id:
+            await websocket_manager.send(session_id, {
+                "event": "error",
+                "message": f"Evaluation failed: {str(e)}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
     finally:
         # Clean up temp file

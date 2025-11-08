@@ -1,9 +1,50 @@
-import { useState, useRef, DragEvent, useEffect } from 'react';
+import { useState, useRef, DragEvent, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, X, Brain, ShieldCheck } from 'lucide-react';
+import { Upload, FileText, X, Brain, ShieldCheck, Sparkles, ArrowRight, ShieldAlert, LineChart } from 'lucide-react';
 import { Button } from '../components/Button';
 import { LoadingAnimation } from '../components/LoadingAnimation';
 import { evaluationService } from '../services/evaluationService';
+import { pipelineStages, type StageStatus } from '../components/pipelineStages';
+
+const API_BASE_URL = ((import.meta as unknown) as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL
+  || 'http://localhost:8000/api';
+
+const deriveWebSocketBase = (apiUrl: string): string => {
+  const trimmed = apiUrl.replace(/\/+$/, '');
+  const withoutApi = trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
+  if (withoutApi.startsWith('https://')) {
+    return `wss://${withoutApi.slice('https://'.length)}`;
+  }
+  if (withoutApi.startsWith('http://')) {
+    return `ws://${withoutApi.slice('http://'.length)}`;
+  }
+  return withoutApi;
+};
+
+const WS_BASE_URL = deriveWebSocketBase(API_BASE_URL);
+
+const featureHighlights = [
+  {
+    title: 'Domain-aware intelligence',
+    description: 'Auto-classify proposals across specialised research domains to contextualise every score.',
+    icon: Brain,
+  },
+  {
+    title: 'Narrative-ready critiques',
+    description: 'AI-crafted feedback you can forward to applicants without additional editing.',
+    icon: Sparkles,
+  },
+  {
+    title: 'Adaptive scoring framework',
+    description: 'Balanced evaluation matrix that weighs innovation, impact, feasibility, and compliance.',
+    icon: LineChart,
+  },
+  {
+    title: 'Immediate risk detection',
+    description: 'Flag budget anomalies, eligibility gaps, and plagiarism patterns before review meetings.',
+    icon: ShieldAlert,
+  },
+];
 
 export function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -15,11 +56,160 @@ export function Home() {
   const [useAutoDomain, setUseAutoDomain] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const [stageStatuses, setStageStatuses] = useState<StageStatus[]>(() => pipelineStages.map(() => 'pending'));
+  const [pipelineProgress, setPipelineProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState<string>('Preparing evaluation pipeline...');
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const websocketRef = useRef<WebSocket | null>(null);
+  const stageIndexMap = useMemo(() => {
+    const mapping: Record<string, number> = {};
+    pipelineStages.forEach((stage, index) => {
+      mapping[stage.key] = index;
+    });
+    return mapping;
+  }, []);
 
   useEffect(() => {
-    // Fetch available domains on component mount
     evaluationService.getDomains().then(setDomains).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      const socket = websocketRef.current;
+      socket?.close();
+    };
+  }, []);
+
+  const getStageIndexFromPayload = (payload: unknown): number | null => {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    const data = payload as Record<string, unknown>;
+    if (typeof data.stage_index === 'number' && data.stage_index >= 0) {
+      return Math.min(data.stage_index, pipelineStages.length - 1);
+    }
+    if (typeof data.stage_key === 'string' && stageIndexMap[data.stage_key] !== undefined) {
+      return stageIndexMap[data.stage_key];
+    }
+    return null;
+  };
+
+  const handlePipelineEvent = (payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+    const data = payload as Record<string, unknown>;
+    const eventType = typeof data.event === 'string' ? data.event : undefined;
+
+    if (eventType === 'connected') {
+      setStageStatuses(pipelineStages.map(() => 'pending'));
+      setPipelineProgress(0);
+      setStatusMessage('Preparing evaluation pipeline...');
+      setPipelineError(null);
+      return;
+    }
+
+    if (eventType === 'status') {
+      const status = typeof data.status === 'string' ? data.status : undefined;
+      if (status === 'queued') {
+        setStageStatuses(pipelineStages.map(() => 'pending'));
+      } else {
+        const stageIndex = getStageIndexFromPayload(data);
+        if (stageIndex !== null) {
+          if (status === 'started') {
+            setStageStatuses(
+              pipelineStages.map((_, index) => {
+                if (index < stageIndex) {
+                  return 'complete';
+                }
+                if (index === stageIndex) {
+                  return 'active';
+                }
+                return 'pending';
+              }),
+            );
+          } else if (status === 'completed') {
+            setStageStatuses((prev) => {
+              const updated = [...prev];
+              updated[stageIndex] = 'complete';
+              return updated;
+            });
+          }
+        }
+      }
+
+      if (typeof data.progress === 'number') {
+        setPipelineProgress(Math.max(0, Math.min(100, data.progress)));
+      }
+
+      if (typeof data.message === 'string' && data.message.trim().length > 0) {
+        setStatusMessage(data.message);
+      }
+
+      setPipelineError(null);
+      return;
+    }
+
+    if (eventType === 'complete') {
+      setStageStatuses(pipelineStages.map(() => 'complete'));
+      setPipelineProgress(
+        typeof data.progress === 'number' ? Math.max(0, Math.min(100, data.progress)) : 100,
+      );
+      setStatusMessage('Evaluation complete. Redirecting to results…');
+      setPipelineError(null);
+      const socket = websocketRef.current;
+      socket?.close();
+      websocketRef.current = null;
+      return;
+    }
+
+    if (eventType === 'error') {
+      const errorMessage = typeof data.message === 'string' ? data.message : 'Evaluation failed';
+      setPipelineError(errorMessage);
+      setStatusMessage(errorMessage);
+      const socket = websocketRef.current;
+      socket?.close();
+      websocketRef.current = null;
+    }
+  };
+
+  const openStatusSocket = (id: string) => {
+    try {
+      websocketRef.current?.close();
+    } catch (error) {
+      console.warn('Previous websocket close error:', error);
+    }
+
+    try {
+      const socket = new WebSocket(`${WS_BASE_URL}/ws/evaluation/${id}`);
+      websocketRef.current = socket;
+
+      socket.onopen = () => {
+        setPipelineError(null);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handlePipelineEvent(data);
+        } catch (error) {
+          console.error('Failed to parse pipeline status message:', error);
+        }
+      };
+
+      socket.onerror = () => {
+        setPipelineError((prev) => prev ?? 'Connection issue while streaming status updates.');
+      };
+
+      socket.onclose = () => {
+        websocketRef.current = null;
+      };
+    } catch (error) {
+      console.error('Failed to open websocket for status updates:', error);
+      setPipelineError('Unable to connect for live status updates.');
+      setStatusMessage('Unable to connect for live status updates.');
+    }
+  };
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -34,7 +224,6 @@ export function Home() {
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && isValidFile(droppedFile)) {
       setFile(droppedFile);
@@ -48,25 +237,43 @@ export function Home() {
     }
   };
 
-  const isValidFile = (file: File) => {
-    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    return validTypes.includes(file.type);
+  const isValidFile = (incomingFile: File) => {
+    const validTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    return validTypes.includes(incomingFile.type);
   };
 
   const handleEvaluate = async () => {
     if (!file) return;
 
+    const newSessionId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+
+    setStageStatuses(pipelineStages.map(() => 'pending'));
+    setPipelineProgress(0);
+    setStatusMessage('Preparing evaluation pipeline...');
+    setPipelineError(null);
     setIsEvaluating(true);
 
+    openStatusSocket(newSessionId);
+
     try {
-      // Upload file with optional domain override and plagiarism check
-      const domain = useAutoDomain ? undefined : selectedDomain;
-      const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism);
+      const domain = useAutoDomain ? undefined : selectedDomain || undefined;
+      const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism, newSessionId);
       navigate(`/results/${saved.id}`);
     } catch (error) {
       console.error('Evaluation failed:', error);
+      const fallbackMessage = 'Evaluation failed. Please try again.';
+      setPipelineError(fallbackMessage);
+      setStatusMessage(fallbackMessage);
       alert('Evaluation failed. Please try again.');
       setIsEvaluating(false);
+      websocketRef.current?.close();
+      websocketRef.current = null;
     }
   };
 
@@ -77,153 +284,179 @@ export function Home() {
     }
   };
 
+  const isEvaluateDisabled = !file || (!useAutoDomain && !selectedDomain);
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-      {isEvaluating && <LoadingAnimation />}
+    <div className="relative">
+      {isEvaluating && (
+        <LoadingAnimation
+          stageStatuses={stageStatuses}
+          progress={pipelineProgress}
+          message={statusMessage}
+          isError={Boolean(pipelineError)}
+        />
+      )}
 
-      <div className="max-w-4xl w-full space-y-8">
-        <div className="text-center space-y-4 animate-fade-in">
-          <h1 className="text-5xl md:text-6xl font-bold gradient-text">
-            AI Grant Evaluator
-          </h1>
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-            Upload your grant proposal and receive comprehensive, AI-powered evaluation with detailed scoring, critiques, and actionable recommendations.
+      <div className="mx-auto max-w-5xl space-y-12 px-4 pb-24 pt-16 lg:px-8">
+        <section className="space-y-3 text-center">
+          <h1 className="text-4xl font-semibold text-white sm:text-5xl">AI Grant Evaluator</h1>
+          <p className="mx-auto max-w-2xl text-base text-slate-300">
+            Upload a proposal and receive a complete AI-assisted review package in minutes.
           </p>
-        </div>
+        </section>
 
-        <div className="card-premium p-8 md:p-12 animate-slide-up">
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300 ${
-              isDragging
-                ? 'border-accent-magenta bg-accent-magenta/10 scale-105'
-                : 'border-charcoal-700 hover:border-accent-purple hover:bg-charcoal-900/50'
-            }`}
-          >
-            {!file ? (
-              <>
-                <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow-purple">
-                    <Upload className="w-10 h-10 text-white" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-semibold text-gray-200 mb-2">
-                  Drag & Drop Your Grant
-                </h3>
-                <p className="text-gray-400 mb-6">
-                  or click to browse files (PDF, DOCX)
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <span className="inline-block border-2 border-accent-purple text-accent-purple hover:bg-accent-purple hover:text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300">
-                    Browse Files
-                  </span>
-                </label>
-              </>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between p-4 bg-charcoal-900 rounded-xl">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-medium text-gray-200">{file.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={removeFile}
-                    className="p-2 hover:bg-charcoal-800 rounded-lg transition-colors"
-                  >
-                    <X className="w-5 h-5 text-gray-400 hover:text-error" />
-                  </button>
-                </div>
-
-                {/* Domain Selection */}
-                <div className="space-y-3 p-4 bg-charcoal-900/50 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Brain className="w-5 h-5 text-accent-purple" />
-                    <h3 className="font-semibold text-gray-200">Domain Classification</h3>
-                  </div>
-                  
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useAutoDomain}
-                      onChange={(e) => setUseAutoDomain(e.target.checked)}
-                      className="w-4 h-4 text-accent-purple bg-charcoal-800 border-charcoal-700 rounded focus:ring-accent-purple focus:ring-2"
-                    />
-                    <span className="text-sm text-gray-300">Auto-detect domain using AI</span>
-                  </label>
-
-                  {!useAutoDomain && (
-                    <select
-                      value={selectedDomain}
-                      onChange={(e) => setSelectedDomain(e.target.value)}
-                      className="w-full px-4 py-2 bg-charcoal-800 border border-charcoal-700 rounded-lg text-gray-200 focus:outline-none focus:border-accent-purple"
-                    >
-                      <option value="">Select a domain...</option>
-                      {domains.map((domain) => (
-                        <option key={domain} value={domain}>
-                          {domain}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                {/* Plagiarism Check */}
-                <div className="space-y-3 p-4 bg-charcoal-900/50 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldCheck className="w-5 h-5 text-accent-magenta" />
-                    <h3 className="font-semibold text-gray-200">Additional Checks</h3>
-                  </div>
-                  
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={checkPlagiarism}
-                      onChange={(e) => setCheckPlagiarism(e.target.checked)}
-                      className="w-4 h-4 text-accent-magenta bg-charcoal-800 border-charcoal-700 rounded focus:ring-accent-magenta focus:ring-2"
-                    />
-                    <span className="text-sm text-gray-300">Run plagiarism detection</span>
-                  </label>
-                </div>
-
-                <Button onClick={handleEvaluate} className="w-full" size="lg">
-                  Evaluate Grant
-                </Button>
+        <section className="relative">
+          <div className="pointer-events-none absolute -inset-4 rounded-3xl bg-gradient-primary opacity-15 blur-2xl" />
+          <div className="relative rounded-3xl border border-white/10 bg-surface-900/90 p-8 shadow-card backdrop-blur-xl">
+            <header className="mb-6 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Review workspace</p>
+                <h2 className="text-2xl font-semibold text-white">Upload a proposal</h2>
               </div>
-            )}
-          </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-primary text-white shadow-glow-primary">
+                <Upload className="h-6 w-6" />
+              </div>
+            </header>
 
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center p-6 bg-charcoal-900/50 rounded-xl">
-              <div className="text-3xl font-bold gradient-text mb-2">8.5/10</div>
-              <p className="text-sm text-gray-400">Average Score</p>
-            </div>
-            <div className="text-center p-6 bg-charcoal-900/50 rounded-xl">
-              <div className="text-3xl font-bold gradient-text mb-2">7</div>
-              <p className="text-sm text-gray-400">Critique Domains</p>
-            </div>
-            <div className="text-center p-6 bg-charcoal-900/50 rounded-xl">
-              <div className="text-3xl font-bold gradient-text mb-2">10</div>
-              <p className="text-sm text-gray-400">Section Scores</p>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-surface-800/60 px-6 py-12 text-center transition-all duration-300 ${
+                isDragging ? 'border-secondary/70 bg-secondary/5 ring-2 ring-secondary/50' : 'hover:border-secondary/60 hover:bg-white/5'
+              }`}
+            >
+              {!file ? (
+                <>
+                  <div className="mb-4 flex items-center justify-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 text-secondary">
+                      <Sparkles className="h-8 w-8" />
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Drag & drop your grant proposal</h3>
+                  <p className="mt-2 max-w-sm text-sm text-slate-400">
+                    Secure upload for PDF or DOCX files up to 25 MB.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="mt-6 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-300 hover:border-secondary/60 hover:bg-secondary/20"
+                  >
+                    Browse files
+                    <ArrowRight className="h-4 w-4" />
+                  </label>
+                </>
+              ) : (
+                <div className="w-full space-y-6 text-left">
+                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-white">
+                        <FileText className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{file.name}</p>
+                        <p className="text-xs text-slate-400">{Math.max(1, Math.round(file.size / 1024))} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={removeFile}
+                      className="rounded-xl border border-transparent bg-white/5 p-2 text-slate-300 transition hover:border-white/20 hover:text-white"
+                      aria-label="Remove file"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white/80">
+                      <Brain className="h-4 w-4 text-secondary" />
+                      Domain classification
+                    </div>
+                    <label className="flex items-center gap-3 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={useAutoDomain}
+                        onChange={(e) => setUseAutoDomain(e.target.checked)}
+                        className="h-4 w-4 rounded border-white/20 bg-surface-900 text-secondary focus:ring-secondary"
+                      />
+                      Auto-detect dominant research domain
+                    </label>
+
+                    {!useAutoDomain && (
+                      <select
+                        value={selectedDomain}
+                        onChange={(e) => setSelectedDomain(e.target.value)}
+                        className="w-full rounded-2xl border border-white/15 bg-surface-900 px-4 py-3 text-sm text-white focus:border-secondary/60 focus:outline-none"
+                        aria-label="Manual domain selection"
+                      >
+                        <option value="">Select a domain…</option>
+                        {domains.map((domain) => (
+                          <option key={domain} value={domain}>
+                            {domain}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white/80">
+                      <ShieldCheck className="h-4 w-4 text-secondary" />
+                      Additional checks
+                    </div>
+                    <label className="flex items-center gap-3 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={checkPlagiarism}
+                        onChange={(e) => setCheckPlagiarism(e.target.checked)}
+                        className="h-4 w-4 rounded border-white/20 bg-surface-900 text-secondary focus:ring-secondary"
+                      />
+                      Run plagiarism scan against indexed research corpus
+                    </label>
+                  </div>
+
+                  <Button
+                    onClick={handleEvaluate}
+                    className="w-full"
+                    size="lg"
+                    disabled={isEvaluateDisabled}
+                  >
+                    Launch evaluation
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="space-y-2 text-center">
+            <h2 className="text-2xl font-semibold text-white">Why use AI Grant Evaluator</h2>
+            <p className="mx-auto max-w-2xl text-sm text-slate-400">
+              A focused toolkit that pairs automated scoring with the guardrails reviewers expect.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {featureHighlights.map(({ title, description, icon: Icon }) => (
+              <div key={title} className="card-variant flex h-full items-start gap-4 p-5">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-secondary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-white">{title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-300">{description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

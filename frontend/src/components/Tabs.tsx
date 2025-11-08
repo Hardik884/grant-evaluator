@@ -18,15 +18,15 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
 
   return (
     <div className="w-full">
-      <div className="flex gap-2 p-1 bg-charcoal-900 rounded-xl mb-6 overflow-x-auto">
+      <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-xl">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 min-w-fit px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+            className={`min-w-fit flex-1 rounded-2xl px-6 py-3 text-sm font-semibold transition-all duration-300 ${
               activeTab === tab.id
-                ? 'bg-gradient-primary text-white shadow-glow-purple'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-charcoal-800'
+                ? 'bg-gradient-primary text-white shadow-glow-primary'
+                : 'text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
             {tab.label}

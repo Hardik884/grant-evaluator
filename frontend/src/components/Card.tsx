@@ -9,8 +9,8 @@ interface CardProps {
 export function Card({ children, className = '', hover = false }: CardProps) {
   return (
     <div
-      className={`card-premium p-6 ${
-        hover ? 'hover:shadow-card-hover hover:-translate-y-1 transition-all duration-300' : ''
+      className={`card-premium p-6 sm:p-8 transition-all duration-300 ${
+        hover ? 'hover:-translate-y-1 hover:shadow-floating' : ''
       } ${className}`}
     >
       {children}

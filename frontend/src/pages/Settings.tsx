@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { Save, ShieldCheck, SlidersHorizontal, Info } from 'lucide-react';
 import { Card } from '../components/Card';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -54,90 +54,106 @@ export function Settings() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto p-6 flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent-purple"></div>
+      <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-secondary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="space-y-2 animate-fade-in">
-        <h1 className="text-4xl font-bold gradient-text">Settings</h1>
-        <p className="text-gray-400">Configure evaluation parameters and system preferences</p>
+    <div className="mx-auto max-w-6xl space-y-10 px-4 pb-24 pt-10 lg:px-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-semibold text-white">Settings</h1>
+        <p className="max-w-2xl text-sm text-slate-300">
+          Adjust evaluation defaults and budget limits for future runs.
+        </p>
       </div>
 
-      <Card className="animate-slide-up">
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-200 mb-4">Evaluation Parameters</h2>
-            <div className="space-y-6">
-              <Input
-                type="number"
-                label="Maximum Allowable Budget ($)"
-                value={settings.max_budget || ''}
-                onChange={(e) => setSettings({ ...settings, max_budget: Number(e.target.value) })}
-                placeholder="500000"
-              />
-
-              <Input
-                type="number"
-                label="Document Chunk Size"
-                value={settings.chunk_size || ''}
-                onChange={(e) => setSettings({ ...settings, chunk_size: Number(e.target.value) })}
-                placeholder="1000"
-              />
-
-              <div className="bg-charcoal-900 rounded-xl p-4 border border-charcoal-700">
-                <h3 className="font-medium text-gray-300 mb-2">About These Settings</h3>
-                <ul className="space-y-2 text-sm text-gray-400">
-                  <li>
-                    <strong className="text-gray-300">Maximum Allowable Budget:</strong> Sets the budget threshold for flagging proposals that exceed this amount.
-                  </li>
-                  <li>
-                    <strong className="text-gray-300">Document Chunk Size:</strong> Controls how the AI processes large documents. Larger chunks may provide more context but use more resources.
-                  </li>
-                </ul>
-              </div>
+      <div className="grid gap-8 lg:grid-cols-[1.15fr,0.85fr]">
+        <Card className="space-y-8">
+          <div className="flex items-center gap-3 text-secondary">
+            <SlidersHorizontal className="h-5 w-5" />
+            <div>
+              <span className="text-xs uppercase tracking-[0.25em] text-secondary">Evaluation</span>
+              <h2 className="mt-1 text-xl font-semibold text-white">Defaults</h2>
             </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Input
+              type="number"
+              label="Maximum Allowable Budget ($)"
+              value={settings.max_budget ?? ''}
+              onChange={(e) => setSettings({ ...settings, max_budget: Number(e.target.value) })}
+              placeholder="500000"
+            />
+
+            <Input
+              type="number"
+              label="Document Chunk Size"
+              value={settings.chunk_size ?? ''}
+              onChange={(e) => setSettings({ ...settings, chunk_size: Number(e.target.value) })}
+              placeholder="1000"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-300">
+            <h3 className="mb-2 text-base font-semibold text-white">Quick help</h3>
+            <ul className="space-y-2">
+              <li>
+                <strong className="text-slate-100">Max budget</strong>: Anything above this value is flagged in results.
+              </li>
+              <li>
+                <strong className="text-slate-100">Chunk size</strong>: Number of tokens processed per document slice.
+              </li>
+            </ul>
           </div>
 
           {message && (
             <div
-              className={`p-4 rounded-xl border ${
+              className={`rounded-2xl border px-4 py-3 text-sm ${
                 message.type === 'success'
-                  ? 'bg-success/10 border-success text-success'
-                  : 'bg-error/10 border-error text-error'
+                  ? 'border-secondary/60 bg-secondary/10 text-secondary'
+                  : 'border-error/60 bg-error/10 text-error'
               }`}
             >
               {message.text}
             </div>
           )}
 
-          <div className="flex justify-end pt-4">
+          <div className="flex justify-end">
             <Button onClick={handleSave} isLoading={isSaving} className="flex items-center gap-2">
-              <Save className="w-5 h-5" />
-              Save Settings
+              <Save className="h-5 w-5" />
+              Save changes
             </Button>
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      <Card className="animate-slide-up bg-gradient-dark">
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-200">System Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-charcoal-800/50 rounded-xl">
-              <p className="text-sm text-gray-400 mb-1">Version</p>
-              <p className="text-lg font-semibold text-gray-200">1.0.0</p>
+        <div className="space-y-6">
+          <Card className="space-y-3">
+            <div className="flex items-center gap-2 text-secondary">
+              <Info className="h-5 w-5" />
+              <h3 className="text-lg font-semibold text-white">System info</h3>
             </div>
-            <div className="p-4 bg-charcoal-800/50 rounded-xl">
-              <p className="text-sm text-gray-400 mb-1">Model</p>
-              <p className="text-lg font-semibold text-gray-200">GPT-4 Turbo</p>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li><strong className="text-slate-100">Version</strong>: 1.0.0</li>
+              <li><strong className="text-slate-100">Model stack</strong>: gemini-2.0-flash + retrieval agents</li>
+            </ul>
+          </Card>
+
+          <Card className="space-y-3">
+            <div className="flex items-center gap-2 text-secondary">
+              <ShieldCheck className="h-5 w-5" />
+              <h3 className="text-lg font-semibold text-white">Data & safety</h3>
             </div>
-          </div>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li>Uploads are encrypted and cleared after 24 hours.</li>
+              <li>Reviewer changes remain in an audit log.</li>
+              <li>Prompts avoid storing applicant data.</li>
+            </ul>
+          </Card>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

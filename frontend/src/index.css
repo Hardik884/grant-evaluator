@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-navy-900 text-gray-100 font-sans antialiased;
+    @apply bg-midnight-900 text-slate-100 font-sans antialiased selection:bg-primary/60 selection:text-white;
   }
 }
 
@@ -14,14 +14,26 @@
   }
 
   .card-premium {
-    @apply bg-charcoal-800 rounded-2xl shadow-card border border-charcoal-700;
+    @apply bg-surface-900/80 border border-white/5 rounded-3xl shadow-card backdrop-blur-xl;
+  }
+
+  .card-variant {
+    @apply bg-surface-800/70 border border-white/5 rounded-2xl shadow-floating backdrop-blur-lg;
   }
 
   .btn-gradient {
-    @apply bg-gradient-primary text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-glow-purple transition-all duration-300 hover:scale-105;
+    @apply relative overflow-hidden bg-gradient-primary text-white font-semibold py-3 px-7 rounded-2xl shadow-glow-primary transition-all duration-300 hover:shadow-glow-secondary focus:outline-none focus:ring-2 focus:ring-secondary/70 focus:ring-offset-2 focus:ring-offset-midnight-900;
+  }
+
+  .btn-ghost {
+    @apply text-slate-200/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl transition-all duration-300;
   }
 
   .input-premium {
-    @apply bg-charcoal-800 border border-charcoal-700 rounded-xl px-4 py-3 text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-purple focus:border-transparent transition-all;
+    @apply bg-surface-800/60 border border-white/10 rounded-2xl px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/70 focus:border-transparent transition-all;
+  }
+
+  .badge-soft {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-2 bg-white/10 border border-white/10 text-xs uppercase tracking-[0.24em] text-slate-300;
   }
 }

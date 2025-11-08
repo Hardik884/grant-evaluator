@@ -4,6 +4,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 from io import BytesIO
 from datetime import datetime
@@ -125,34 +126,31 @@ def generate_evaluation_report_pdf(evaluation_data: dict) -> BytesIO:
     
     # Overall Score
     overall_score = evaluation_data.get('overall_score', 0)
-    elements.append(Paragraph(f"Overall Score: {overall_score:.1f}/100", heading_style))
+    elements.append(Paragraph(f"Overall Score: {overall_score:.1f}/10", heading_style))
     
     # Score visualization
-    score_bar_data = [['']]
-    score_bar = Table(score_bar_data, colWidths=[17*cm], rowHeights=[0.8*cm])
-    
     # Determine color based on score
-    if overall_score >= 80:
+    if overall_score >= 8:
         bar_color = colors.HexColor('#10b981')
-    elif overall_score >= 60:
+    elif overall_score >= 6:
         bar_color = colors.HexColor('#f59e0b')
     else:
         bar_color = colors.HexColor('#ef4444')
     
-    # Create gradient effect with multiple cells
-    score_percentage = overall_score / 100
-    filled_width = 17 * score_percentage
-    
-    score_bar.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e5e7eb')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ]))
-    
+    # Draw filled score bar using drawing primitives
+    score_percentage = max(0.0, min(overall_score / 10, 1.0))
+    bar_width = 17 * cm
+    bar_height = 0.8 * cm
+    score_bar = Drawing(bar_width, bar_height)
+    score_bar.add(Rect(0, 0, bar_width, bar_height, fillColor=colors.HexColor('#e5e7eb'), strokeColor=None))
+    if score_percentage > 0:
+        score_bar.add(Rect(0, 0, bar_width * score_percentage, bar_height, fillColor=bar_color, strokeColor=None))
+
     elements.append(score_bar)
     elements.append(Spacer(1, 0.3*cm))
     
     # Score text
-    elements.append(Paragraph(f"<i>{overall_score:.1f}% - {get_score_description(overall_score)}</i>", normal_style))
+    elements.append(Paragraph(f"<i>{overall_score:.1f}/10 — {get_score_description(overall_score)}</i>", normal_style))
     elements.append(Spacer(1, 1*cm))
     
     # Detailed Scores
@@ -189,13 +187,17 @@ def generate_evaluation_report_pdf(evaluation_data: dict) -> BytesIO:
             category = score_item.get('category', 'N/A')
             elements.append(Paragraph(f"<b>{category}</b>", subheading_style))
             
-            strengths = score_item.get('strengths', [])
+            strengths = score_item.get('strengths') or []
+            if not strengths:
+                strengths = ['No standout strengths recorded.']
             if strengths:
                 elements.append(Paragraph("<b>Strengths:</b>", normal_style))
                 for strength in strengths:
                     elements.append(Paragraph(f"• {strength}", normal_style))
             
-            weaknesses = score_item.get('weaknesses', [])
+            weaknesses = score_item.get('weaknesses') or []
+            if not weaknesses:
+                weaknesses = ['No critical weaknesses identified.']
             if weaknesses:
                 elements.append(Paragraph("<b>Weaknesses:</b>", normal_style))
                 for weakness in weaknesses:
@@ -211,7 +213,9 @@ def generate_evaluation_report_pdf(evaluation_data: dict) -> BytesIO:
     
     if full_critique:
         # Summary
-        summary = full_critique.get('summary', 'No summary available.')
+        summary = full_critique.get('summary') if isinstance(full_critique, dict) else None
+        if not isinstance(summary, str) or not summary.strip():
+            summary = 'No executive summary was generated.'
         elements.append(Paragraph("<b>Executive Summary:</b>", subheading_style))
         elements.append(Paragraph(summary, normal_style))
         elements.append(Spacer(1, 0.8*cm))
@@ -323,15 +327,15 @@ def generate_evaluation_report_pdf(evaluation_data: dict) -> BytesIO:
 
 def get_score_description(score: float) -> str:
     """Get a text description based on the score"""
-    if score >= 90:
+    if score >= 9:
         return "Excellent - Highly Recommended"
-    elif score >= 80:
+    elif score >= 8:
         return "Very Good - Recommended"
-    elif score >= 70:
+    elif score >= 7:
         return "Good - Consider with Minor Revisions"
-    elif score >= 60:
+    elif score >= 6:
         return "Satisfactory - Major Revisions Needed"
-    elif score >= 50:
+    elif score >= 5:
         return "Below Average - Significant Concerns"
     else:
         return "Poor - Not Recommended"
