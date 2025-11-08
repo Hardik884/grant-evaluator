@@ -170,9 +170,9 @@ DOMAIN_WEIGHTS = {
 }
 
 
-def compute_weighted_score(scores: dict, domain: str) -> float:
+def compute_section_weighted_score(scores: dict, domain: str) -> float:
     """
-    Compute weighted score based on domain-specific weights.
+    Compute weighted score for SECTION scores only (content evaluation).
     
     Args:
         scores: Dictionary of criterion scores (e.g., {"Objectives": 8.5, "Methodology": 7.0, ...})
@@ -193,20 +193,22 @@ def compute_weighted_score(scores: dict, domain: str) -> float:
     for criterion, score_data in scores.items():
         if criterion in weights:
             # Extract numeric score from dict structure
-            # score_data can be either a dict like {"score": 8, "summary": "..."} or just a number
             if isinstance(score_data, dict):
                 score = score_data.get("score", 0)
             else:
                 score = score_data
             
-            weighted_sum += score * weights[criterion]
-            total_weight += weights[criterion]
+            weight = weights[criterion]
+            contribution = score * weight
+            weighted_sum += contribution
+            total_weight += weight
     
     # Normalize by total weight to handle missing criteria
     if total_weight > 0:
-        return weighted_sum / total_weight
+        section_score = weighted_sum / total_weight
+        return section_score
     else:
-        # Fallback to simple average, handling dict structure
+        # Fallback to simple average
         score_values = []
         for score_data in scores.values():
             if isinstance(score_data, dict):
@@ -214,3 +216,72 @@ def compute_weighted_score(scores: dict, domain: str) -> float:
             else:
                 score_values.append(score_data)
         return sum(score_values) / len(score_values) if score_values else 0.0
+
+
+def compute_critique_average(critique_domains: list) -> float:
+    """
+    Compute average of critique domain scores (quality evaluation).
+    
+    Args:
+        critique_domains: List of critique domain scores [{"domain": "Scientific", "score": 7.5}, ...]
+    
+    Returns:
+        Average critique score (0-10 scale)
+    """
+    if not critique_domains or not isinstance(critique_domains, list):
+        return 0.0
+    
+    scores = [d.get("score", 0) for d in critique_domains if isinstance(d, dict) and "score" in d]
+    
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    
+    return avg_score
+
+
+def compute_weighted_score(scores: dict, domain: str, critique_domains: list = None) -> float:
+    """
+    Compute comprehensive final score combining section scores and critique scores.
+    
+    SCORING FORMULA:
+    Final Score = (Section Score × 0.60) + (Critique Score × 0.40)
+    
+    - Section Score (60%): Domain-weighted evaluation of proposal content
+      (Objectives, Methodology, Innovation, Feasibility, Budget, etc.)
+    
+    - Critique Score (40%): Quality assessment across critique dimensions
+      (Scientific Rigor, Practical Feasibility, Language, Context, etc.)
+    
+    This balanced approach ensures both WHAT is proposed (content) and 
+    HOW WELL it's presented (quality) contribute to the final evaluation.
+    
+    Args:
+        scores: Dictionary of section scores
+        domain: The domain/category of the grant proposal
+        critique_domains: List of critique domain scores (optional)
+    
+    Returns:
+        Comprehensive final score (0-10 scale)
+    """
+    # Calculate section-weighted score (content evaluation)
+    section_score = compute_section_weighted_score(scores, domain)
+    
+    # If no critique data, use section score only
+    if not critique_domains:
+        return section_score
+    
+    # Calculate critique average (quality evaluation)
+    critique_score = compute_critique_average(critique_domains)
+    
+    # Combined formula: 60% content + 40% quality
+    SECTION_WEIGHT = 0.60
+    CRITIQUE_WEIGHT = 0.40
+    
+    final_score = (section_score * SECTION_WEIGHT) + (critique_score * CRITIQUE_WEIGHT)
+    
+    return final_score
+
+
+# Backward compatibility alias
+def compute_weighted_score_legacy(scores: dict, domain: str) -> float:
+    """Legacy function for backward compatibility - uses section scores only"""
+    return compute_section_weighted_score(scores, domain)

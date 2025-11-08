@@ -3,6 +3,29 @@ import type { Evaluation, Settings } from '../types/evaluation';
 // Backend API base URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
+// Helper function for retrying failed requests
+async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      // Only retry on network errors, not on HTTP errors
+      if (attempt < maxRetries && error instanceof TypeError) {
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw error;
+    }
+  }
+  
+  throw lastError || new Error('Request failed');
+}
+
 export const evaluationService = {
   async saveEvaluation(
     file: File,
@@ -34,14 +57,20 @@ export const evaluationService = {
   },
 
   async getDomains(): Promise<string[]> {
-    const response = await fetch(`${API_BASE_URL}/domains`);
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/domains`);
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch domains');
+      if (!response.ok) {
+        throw new Error('Failed to fetch domains');
+      }
+
+      const data = await response.json();
+      return data.domains;
+    } catch (error) {
+      console.error('Error fetching domains:', error);
+      // Return empty array instead of throwing to prevent blocking the UI
+      return [];
     }
-
-    const data = await response.json();
-    return data.domains;
   },
 
   async getEvaluations(): Promise<Evaluation[]> {

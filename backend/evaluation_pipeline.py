@@ -36,6 +36,75 @@ PIPELINE_STAGES = [
 ]
 
 
+def build_critique_domain_scores(critique: dict, scores: dict, domain: str) -> list:
+    """
+    Build critique domain scores from critique analysis.
+    Uses a scoring model based on section scores, adjusted by issues and recommendations.
+    
+    Args:
+        critique: The critique dictionary with domain-specific analysis
+        scores: The section scores dictionary
+        domain: The grant domain
+    
+    Returns:
+        List of critique domain scores [{"domain": "Scientific", "score": 7.5}, ...]
+    """
+    critique_domain_scores = []
+    
+    # Mapping critique domains to their display names
+    critique_domain_map = {
+        "scientific_critique": "Scientific",
+        "practical_critique": "Practical",
+        "language_critique": "Language",
+        "context_critique": "Context",
+        "persuasiveness_critique": "Persuasiveness",
+        "ethical_critique": "Ethical",
+        "innovation_critique": "Innovation"
+    }
+    
+    # Calculate average section score as baseline
+    section_scores_list = []
+    for section_data in scores.get("scores", {}).values():
+        if isinstance(section_data, dict):
+            section_scores_list.append(section_data.get("score", 0))
+    
+    avg_section_score = sum(section_scores_list) / len(section_scores_list) if section_scores_list else 6.0
+    
+    for domain_key, display_name in critique_domain_map.items():
+        domain_critique = critique.get(domain_key, {})
+        
+        if not domain_critique or not isinstance(domain_critique, dict):
+            print(f"[WARNING] No critique data for {domain_key}")
+            critique_domain_scores.append({
+                "domain": display_name,
+                "score": avg_section_score  # Use section avg as default
+            })
+            continue
+        
+        # Count issues and recommendations
+        issues = domain_critique.get("issues", [])
+        recs = domain_critique.get("recommendations", [])
+        issue_count = len(issues) if isinstance(issues, list) else 0
+        rec_count = len(recs) if isinstance(recs, list) else 0
+        
+        # Scoring model: Start from section average, penalize based on issues/recs
+        # - Each issue reduces score by 0.5 points
+        # - Each recommendation reduces score by 0.2 points
+        # This reflects that critique identifies quality problems
+        base_score = avg_section_score
+        issue_penalty = issue_count * 0.5
+        rec_penalty = rec_count * 0.2
+        
+        domain_score = max(0, min(10, base_score - issue_penalty - rec_penalty))
+        
+        critique_domain_scores.append({
+            "domain": display_name,
+            "score": round(domain_score, 1)
+        })
+    
+    return critique_domain_scores
+
+
 def run_full_evaluation(
     file_path: str,
     max_budget: float = 50000,
@@ -56,6 +125,10 @@ def run_full_evaluation(
     Returns:
         dict: structured evaluation result for frontend
     """
+    import uuid
+    
+    # Generate unique session ID for this evaluation to track isolation
+    session_id = uuid.uuid4().hex[:12]
 
     total_stages = len(PIPELINE_STAGES)
 
@@ -109,6 +182,7 @@ def run_full_evaluation(
     if not pages:
         raise ValueError("Document extraction failed.")
     print(f"[INFO] Loaded {len(pages)} pages")
+    
     emit_stage(0, "completed", f"Loaded {len(pages)} pages")
 
     # Step 2 — Build vectorstore fresh each run (avoid cross-proposal contamination)
@@ -116,6 +190,8 @@ def run_full_evaluation(
     print("[INFO] Creating in-memory vectorstore...")
     # Get config path relative to the project root
     config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+    
+    # Use persist_dir=None to create in-memory vectorstore for complete isolation
     vs = vectorstore_agent(pages, config_path=config_path, persist_dir=None)
 
     # Step 3 — Domain classification (or use override) - DO THIS FIRST
@@ -139,14 +215,10 @@ def run_full_evaluation(
     emit_stage(3, "started", "Scoring proposal against rubric")
     print("[INFO] Running scoring agent...")
     scores = run_grant_scoring(summary, domain)
+    
     emit_stage(3, "completed", "Section scores computed")
 
-    # Step 6 — Apply adaptive weighting model
-    print("[INFO] Computing weighted score...")
-    final_weighted_score = compute_weighted_score(scores["scores"], domain)
-    print(f"[INFO] Weighted Score = {final_weighted_score}")
-
-    # Step 7 — Critique (uses scoring, does NOT modify score)
+    # Step 6 — Critique (uses scoring to generate quality assessment)
     emit_stage(4, "started", "Generating critique and risk analysis")
     print("[INFO] Generating critique...")
     critique = run_grant_critique(
@@ -155,34 +227,102 @@ def run_full_evaluation(
         domain=domain
     )
     emit_stage(4, "completed", "Critique ready")
+    
+    # Step 6.5 — Build critique domain scores for comprehensive evaluation
+    print("[INFO] Building critique domain scores...")
+    critique_domain_scores = build_critique_domain_scores(critique, scores, domain)
+    print(f"[INFO] Generated {len(critique_domain_scores)} critique domain scores")
+    
+    # Step 7 — Compute COMPREHENSIVE final score (section scores + critique scores)
+    print("[INFO] Computing comprehensive final score...")
+    
+    # Handle case where LLM returns unexpected structure
+    if not isinstance(scores, dict):
+        raise ValueError(f"Scoring agent returned non-dict type: {type(scores)}")
+    
+    if "scores" not in scores:
+        # Try to recover if the LLM returned the section scores directly
+        if any(key in scores for key in ["Objectives", "Methodology", "Budget"]):
+            print("[WARNING] Scoring agent returned flat structure, wrapping it...")
+            scores = {"scores": scores, "overall_summary": ""}
+        else:
+            raise KeyError(f"Scoring agent response missing 'scores' key. Keys found: {list(scores.keys())}")
+    
+    # Check if scores dict is empty (happens when JSON parsing completely failed)
+    if not scores["scores"] or len(scores["scores"]) == 0:
+        raise ValueError("Scoring agent returned empty scores dictionary. Please retry evaluation.")
+    
+    # NEW: Pass critique domains to get comprehensive score
+    final_weighted_score = compute_weighted_score(
+        scores["scores"], 
+        domain, 
+        critique_domains=critique_domain_scores
+    )
+    print(f"[INFO] Final Comprehensive Score = {final_weighted_score:.2f}/10")
 
-    # Step 8 — Budget analysis
+    # Step 8 — Budget analysis (MULTI-STRATEGY EXTRACTION)
     emit_stage(5, "started", "Evaluating budget structure")
     print("[INFO] Evaluating budget...")
     
-    # Try to extract budget more aggressively
+    # Strategy 1: Get budget from summarizer output
     budget_text = summary.get("Budget", {}).get("text", "")
     budget_notes = summary.get("Budget", {}).get("notes", [])
+    budget_refs = summary.get("Budget", {}).get("references", [])
     
-    # If budget text is empty or too short, try alternative extraction
-    if len(budget_text) < 20:
-        print("[INFO] Budget section short, attempting alternative extraction...")
-        # Look for budget in other sections that might contain it
+    # Strategy 2: Direct search in raw pages for budget keywords
+    print("[INFO] Strategy 2 - Searching raw pages for budget content...")
+    budget_keywords = ["budget", "cost", "$", "expense", "funding", "financial", "price", "total", "personnel", "equipment", "travel", "indirect"]
+    budget_pages_content = []
+    
+    for page in pages:
+        page_text = page.page_content.lower()
+        # Check if page contains multiple budget keywords or dollar signs
+        keyword_count = sum(1 for kw in budget_keywords if kw in page_text)
+        dollar_count = page_text.count("$")
+        
+        if keyword_count >= 2 or dollar_count >= 3:
+            budget_pages_content.append(page.page_content)
+    
+    # If we found budget pages, append to budget_text
+    if budget_pages_content:
+        raw_budget_text = "\n\n".join(budget_pages_content)
+        
+        # If summary budget is weak, replace with raw extraction
+        if len(budget_text) < 100:
+            print("[INFO] Summary budget weak, using raw page extraction")
+            budget_text = raw_budget_text
+        else:
+            # Combine both for comprehensive coverage
+            print("[INFO] Combining summary and raw budget extractions")
+            budget_text = budget_text + "\n\n--- Additional Budget Details from Pages ---\n\n" + raw_budget_text
+    
+    # Strategy 3: Use vectorstore to retrieve budget-specific chunks
+    print("[INFO] Strategy 3 - Vectorstore retrieval for budget...")
+    budget_query_results = vs["ask"]("Extract all budget information, costs, expenses, line items, dollar amounts, and financial details")
+    budget_chunks = [doc.get("text", "") for doc in budget_query_results if any(kw in doc.get("text", "").lower() for kw in ["$", "budget", "cost", "expense"])]
+    
+    if budget_chunks:
+        vector_budget_text = "\n\n".join(budget_chunks[:10])  # Top 10 most relevant
+        
+        # Add to budget text if substantial
+        if len(vector_budget_text) > 100:
+            budget_text = budget_text + "\n\n--- Budget from Vectorstore ---\n\n" + vector_budget_text
+    
+    # Strategy 4: Search in other summary sections for budget mentions
+    if len(budget_text) < 200:
+        print("[INFO] Strategy 4 - Searching other summary sections...")
         for section_name, section_data in summary.items():
-            if isinstance(section_data, dict):
+            if isinstance(section_data, dict) and section_name != "Budget":
                 section_text = section_data.get("text", "")
                 # Check if this section mentions budget/cost/funding
-                if any(keyword in section_text.lower() for keyword in ["budget", "cost", "funding", "financial", "$", "expense"]):
-                    if len(section_text) > len(budget_text):
-                        budget_text = section_text
-                        budget_notes = section_data.get("notes", [])
-                        print(f"[INFO] Found budget info in {section_name} section")
-                        break
+                if any(keyword in section_text.lower() for keyword in budget_keywords):
+                    budget_text += f"\n\n--- From {section_name} Section ---\n{section_text}"
+                    print(f"[INFO] Found budget mentions in {section_name} section")
     
     budget_input = {
         "text": budget_text,
         "notes": budget_notes,
-        "references": summary.get("Budget", {}).get("references", []),
+        "references": budget_refs,
         "score": scores.get("scores", {}).get("Budget", {}).get("score", 5),
         "summary": scores.get("scores", {}).get("Budget", {}).get("summary", "Budget not analyzed"),
         "strengths": scores.get("scores", {}).get("Budget", {}).get("strengths", []),
@@ -316,16 +456,23 @@ def run_full_evaluation(
 
     response = format_evaluation_response(
         summary, scores, critique, budget_evaluation, final_decision,
-        final_weighted_score, domain, plagiarism_result
+        final_weighted_score, domain, critique_domain_scores, plagiarism_result
     )
 
     emit_stage(7, "completed", f"Recommendation ready ({response.get('decision', 'UNKNOWN')})")
 
-    # Done — format into frontend-ready shape
+    # Cleanup: Explicitly delete vectorstore to ensure no contamination
+    try:
+        if vs and "vectorstore" in vs:
+            del vs["vectorstore"]
+            del vs
+    except Exception:
+        pass
+
     return response
 
 
-def format_evaluation_response(summary, scores, critique, budget_eval, decision, final_weighted_score, domain, plagiarism_result=None):
+def format_evaluation_response(summary, scores, critique, budget_eval, decision, final_weighted_score, domain, critique_domain_scores, plagiarism_result=None):
     """
     Convert internal evaluation results to a frontend-compatible output format.
     """
@@ -372,9 +519,8 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
         "recommendations": []
     }
     
-    # Build critique_domains list for frontend
-    # Use a smarter scoring based on severity and count of issues vs recommendations
-    critique_domain_scores = []
+    # Use the critique_domain_scores passed from pipeline (already calculated)
+    # Just extract issues and recommendations for formatted output
     
     # Mapping critique domains to their display names
     critique_domain_map = {
@@ -387,47 +533,15 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
         "innovation_critique": "Innovation"
     }
     
-    print(f"[DEBUG] Critique keys: {list(critique.keys())}")
-    
     for domain_key, display_name in critique_domain_map.items():
         domain_critique = critique.get(domain_key, {})
         
         if not domain_critique or not isinstance(domain_critique, dict):
-            print(f"[WARNING] No data for {domain_key}")
-            # Default score when no data
-            critique_domain_scores.append({
-                "domain": display_name,
-                "score": 6.0  # Slightly above average default
-            })
             continue
         
-        # Count issues and recommendations
+        # Extract issues and recommendations for formatted critique
         issues = domain_critique.get("issues", [])
         recs = domain_critique.get("recommendations", [])
-        issue_count = len(issues) if isinstance(issues, list) else 0
-        rec_count = len(recs) if isinstance(recs, list) else 0
-        
-        # More reasonable scoring aligned with overall score:
-        # - Start from final_weighted_score as baseline (proposals are already scored)
-        # - Each issue reduces score by 0.3-0.5 points (not 1.2!)
-        # - Each recommendation reduces score by 0.1 (minor adjustment)
-        # - Add domain-specific variation (-0.5 to +0.5)
-        base_score = final_weighted_score  # Use actual overall score as baseline
-        issue_penalty = issue_count * 0.4  # Much gentler penalty
-        rec_penalty = rec_count * 0.1
-        
-        # Add slight variation based on domain importance
-        domain_index = list(critique_domain_map.keys()).index(domain_key)
-        variation = (domain_index * 0.15) - 0.5  # Creates -0.5 to +0.5 range
-        
-        domain_score = max(0, min(10, base_score - issue_penalty - rec_penalty + variation))
-        
-        print(f"[DEBUG] {display_name}: {issue_count} issues, {rec_count} recs, base: {base_score:.1f}, score: {domain_score:.1f}")
-        
-        critique_domain_scores.append({
-            "domain": display_name,
-            "score": round(domain_score, 1)
-        })
         
         # Add issues and recommendations to formatted critique with domain tags
         for issue in issues:
@@ -438,7 +552,6 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
                     "domain": display_name,  # Explicit domain tag for filtering
                     "description": issue
                 })
-                print(f"[DEBUG] Added issue for domain '{display_name}': {issue[:50]}...")
         for rec in recs:
             if isinstance(rec, str):
                 formatted_critique["recommendations"].append({
@@ -446,12 +559,7 @@ def format_evaluation_response(summary, scores, critique, budget_eval, decision,
                     "domain": display_name,  # Explicit domain tag for filtering
                     "recommendation": rec
                 })
-                print(f"[DEBUG] Added recommendation for domain '{display_name}': {rec[:50]}...")
     
-    print(f"[DEBUG] Total critique domains: {len(critique_domain_scores)}")
-    print(f"[DEBUG] Total issues added: {len(formatted_critique['issues'])}")
-    print(f"[DEBUG] Total recommendations added: {len(formatted_critique['recommendations'])}")
-
     response = {
         "decision": decision.get("decision", "CONDITIONALLY ACCEPT"),
         "overall_score": final_weighted_score,

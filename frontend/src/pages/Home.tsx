@@ -197,12 +197,20 @@ export function Home() {
         }
       };
 
-      socket.onerror = () => {
-        setPipelineError((prev) => prev ?? 'Connection issue while streaming status updates.');
+      socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        // Only set error if this is an unexpected error, not a normal close
+        if (socket.readyState !== WebSocket.CLOSING && socket.readyState !== WebSocket.CLOSED) {
+          setPipelineError((prev) => prev ?? 'Connection issue while streaming status updates.');
+        }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         websocketRef.current = null;
+        // Only show error if the close was unexpected (not a normal close with code 1000)
+        if (event.code !== 1000 && event.code !== 1001) {
+          console.warn(`WebSocket closed unexpectedly with code ${event.code}`);
+        }
       };
     } catch (error) {
       console.error('Failed to open websocket for status updates:', error);

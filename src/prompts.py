@@ -56,6 +56,14 @@ Include all of the following sections (even if missing in the text):
 - "references": Exact short quotes or key phrases from the proposal to support the summary.
 - "notes": Expert commentary on completeness, clarity, relevance, or missing details.
 
+### SPECIAL INSTRUCTIONS FOR BUDGET SECTION:
+- **EXTRACT ALL DOLLAR AMOUNTS, LINE ITEMS, AND COST CATEGORIES** from the proposal
+- Include budget tables, personnel costs, equipment, materials, travel expenses, indirect costs
+- Copy exact dollar figures (e.g., "$50,000 for personnel", "$10,000 for equipment")
+- List ALL budget categories mentioned with their specific amounts
+- In the "text" field, provide a detailed itemized breakdown with actual numbers
+- In "references", include direct quotes with dollar amounts
+
 If the proposal does not contain enough information for a section, explicitly state:
 - text: "Not provided"
 - pages: []
@@ -84,6 +92,8 @@ Your task is to evaluate the quality of each section objectively and produce **s
 - **Do NOT invent or assume any information that is not clearly present in the summary.**
 - **Do NOT adjust or compute the final overall weighted score.** The scoring engine handles weighting.
 - Return **only valid JSON** exactly in the requested structure.
+- **IMPORTANT: You MUST complete the entire JSON response. Do not truncate strings or leave objects incomplete.**
+- Keep strengths and weaknesses concise (under 100 characters each) to ensure completion.
 
 ### SCORING INSTRUCTIONS
 1. **Rate each section from 0 to 10**
@@ -341,12 +351,38 @@ Analyze the following budget information from a grant proposal and provide a com
 ### Maximum Allowed Budget: ${max_budget}
 
 ### CRITICAL INSTRUCTIONS:
-1. Extract ALL budget-related numbers, categories, and line items from the provided text
-2. Look for budget tables, cost breakdowns, personnel costs, equipment, materials, travel, etc.
-3. If you find budget information, calculate the totalBudget by summing all line items
-4. For each budget category, provide the amount (in dollars) and percentage of total
-5. ALL amounts and percentages MUST be numbers (e.g., 5000.0, 25.5), NEVER use text like "Unclear" or "TBD"
-6. If a value is truly unclear, use 0.0 instead of text
+1. **THOROUGHLY SCAN** the provided text for ALL budget-related information:
+   - Look for explicit budget sections, tables, and line items
+   - Search for dollar amounts with $ signs (e.g., $50,000, $5K, etc.)
+   - Find cost categories: Personnel, Equipment, Materials, Travel, Indirect Costs, etc.
+   - Identify any mentions of: salaries, stipends, supplies, overhead, facilities, administrative costs
+   - Extract costs from narrative descriptions (e.g., "hiring 2 researchers at $60,000 each")
+
+2. **EXTRACT EVERY DOLLAR AMOUNT** you find:
+   - Budget tables with line items
+   - Personnel costs (salaries, wages, benefits)
+   - Equipment purchases
+   - Materials and supplies
+   - Travel expenses
+   - Indirect costs / overhead
+   - Any other costs mentioned
+
+3. **CALCULATE TOTAL BUDGET**:
+   - Sum ALL line items you found
+   - If multiple budget sections exist, combine them
+   - If text mentions "total budget" or "total cost", use that value
+   - Cross-validate total against sum of line items
+
+4. **HANDLE UNCERTAINTIES**:
+   - If a specific dollar amount is unclear, estimate from context
+   - If truly no value is given, use 0.0 (but ONLY as last resort)
+   - If percentages are given with a total, calculate the dollar amounts
+   - If ranges are given (e.g., "$10K-$15K"), use the midpoint
+
+5. **ALL NUMERIC OUTPUTS**:
+   - amount and percentage MUST be numbers (float or int), NEVER strings
+   - Format: 5000.0 (not "5000" or "Unclear" or "TBD")
+   - Calculate percentages from total budget
 
 ### Your Analysis Must Include:
 
@@ -354,6 +390,7 @@ Analyze the following budget information from a grant proposal and provide a com
    - Extract every budget line item with its dollar amount
    - Calculate percentage of total for each category
    - Common categories: Personnel, Equipment, Materials, Travel, Indirect Costs, Other
+   - Create categories if the text describes costs without explicit category names
 
 2. **Cost-Effectiveness Analysis**:
    - Assess if the budget is appropriate for the proposed work
@@ -363,7 +400,7 @@ Analyze the following budget information from a grant proposal and provide a com
 3. **Compliance Check**:
    - Verify if total budget is within the maximum allowed (${max_budget})
    - Check for required budget categories for {domain} research
-   - Flag any budget items that seem inappropriate
+   - Flag any budget items that seem inappropriate or missing
 
 4. **Risk Assessment**:
    - Identify budget-related risks
@@ -379,15 +416,19 @@ Analyze the following budget information from a grant proposal and provide a com
   "flags": [
     {{"type": "warning|error|info", "message": "<description>"}}
   ],
-  "summary": "<overall assessment>"
+  "summary": "<overall assessment including what was found and calculated>"
 }}
 
-IMPORTANT: 
-- amount and percentage MUST be numeric values (float or int), NEVER strings
-- If uncertain about a value, use 0.0 (zero) instead of text
-- Extract actual dollar amounts from the budget text (e.g., "$5,000" becomes 5000.0)
+### EXAMPLES OF GOOD EXTRACTION:
+- Text: "Personnel: $100,000" → {{"category": "Personnel", "amount": 100000.0, "percentage": 66.7}}
+- Text: "Travel budget is $15K" → {{"category": "Travel", "amount": 15000.0, "percentage": 10.0}}
+- Text: "Two postdocs at $50,000 each" → {{"category": "Personnel", "amount": 100000.0, "percentage": 66.7}}
 
-Return **only valid JSON**, no additional text.
+IMPORTANT: 
+- Scan the ENTIRE text for budget information, not just the first section
+- Extract from tables, narratives, and scattered mentions
+- Calculate totals even if not explicitly stated
+- Return **only valid JSON**, no additional text.
 """
 
 

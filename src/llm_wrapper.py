@@ -16,7 +16,7 @@ if not api_key:
 genai.configure(api_key=api_key)
 
 DEFAULT_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
-DEFAULT_MAX_OUTPUT = int(os.getenv("LLM_MAX_OUTPUT", "1024"))
+DEFAULT_MAX_OUTPUT = int(os.getenv("LLM_MAX_OUTPUT", "8192"))
 DEFAULT_CANDIDATES = int(os.getenv("LLM_CANDIDATES", "1"))
 
 LOG_DIR = Path(os.getenv("LLM_LOG_DIR", "logs"))
@@ -38,18 +38,29 @@ def gemini_llm(prompt: str,
     Call Gemini with deterministic defaults. Logs prompt and response to `logs/llm_calls.log`.
 
     Parameters are optional and will default to deterministic values unless overridden by env vars.
+    
+    ISOLATION: Creates a fresh model instance for each call to prevent context contamination.
     """
     temperature = DEFAULT_TEMPERATURE if temperature is None else temperature
     max_output_tokens = DEFAULT_MAX_OUTPUT if max_output_tokens is None else max_output_tokens
     candidate_count = DEFAULT_CANDIDATES if candidate_count is None else candidate_count
 
-    model = genai.GenerativeModel(model_name)
+    # Configure generation parameters
+    # Increase max_output_tokens significantly for long JSON responses
+    if max_output_tokens < 4096:
+        max_output_tokens = 8192  # Ensure we have enough space for complete JSON
+    
+    generation_config = genai.GenerationConfig(
+        temperature=float(temperature),
+        max_output_tokens=int(max_output_tokens),
+        candidate_count=int(candidate_count)
+    )
 
-    kwargs = {
-        "temperature": float(temperature),
-        "max_output_tokens": int(max_output_tokens),
-        "candidate_count": int(candidate_count)
-    }
+    # Create a fresh model instance for each call to prevent context contamination
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        generation_config=generation_config
+    )
 
     # Retry logic for transient API errors
     max_retries = 3
@@ -57,7 +68,7 @@ def gemini_llm(prompt: str,
     
     for attempt in range(max_retries):
         try:
-            response = model.generate_content(prompt, **kwargs)
+            response = model.generate_content(prompt)
             break  # Success, exit retry loop
         except TypeError:
             response = model.generate_content(prompt)

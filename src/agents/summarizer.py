@@ -78,26 +78,62 @@ def run_summarizer_extended(retriever_fn, domain="General"):
         retriever_fn: Function to retrieve relevant documents
         domain: The academic/research domain for context (default: "General")
     """
-    context_text = ""
+    # Strategy 1: Get a larger set of documents with one comprehensive query
+    comprehensive_query = (
+        "Retrieve all sections of this grant proposal including: "
+        "cover letter, objectives, methodology, evaluation plan, expected outcomes, "
+        "budget, feasibility, innovation, sustainability, and letters of support"
+    )
     
-    # Retrieve chunks for each section individually
-    for section in GRANT_SECTIONS:
-        docs = retriever_fn(f"Find the {section} section of this grant proposal, including metrics, responsibilities, and relevant details")
-        if not docs:
-            continue
-        # Stable ordering: sort by page number when possible so prompt inputs are deterministic
-        try:
-            docs_sorted = sorted(docs, key=lambda d: int(d.get('page_number', 0)))
-        except Exception:
-            docs_sorted = docs
-
-        for doc in docs_sorted:
-            page_num = doc.get("page_number", "Unknown")
-            text = doc.get("text", "")
-            source = doc.get("source", "Unknown")
-            context_text += f"[Page {page_num} | Source: {source} | Section: {section}]\n{text}\n\n"
+    all_docs = retriever_fn(comprehensive_query)
+    
+    # Strategy 2: Add dedicated budget retrieval to ensure we capture dollar amounts
+    budget_query = (
+        "budget costs expenses funding financial dollars personnel equipment materials "
+        "travel indirect costs line items budget breakdown total budget requested amount "
+        "salaries stipends supplies overhead facilities administrative expenses"
+    )
+    budget_docs = retriever_fn(budget_query)
+    
+    # Strategy 3: Add numeric/table retrieval for budget tables
+    numeric_query = "$ dollars table cost breakdown itemized line items total amount"
+    numeric_docs = retriever_fn(numeric_query)
+    
+    # Merge documents, avoiding duplicates
+    doc_ids = set()
+    merged_docs = []
+    
+    for doc in all_docs + budget_docs + numeric_docs:
+        # Create unique ID based on content hash
+        doc_id = hash(doc.get('text', '')[:100])
+        if doc_id not in doc_ids:
+            doc_ids.add(doc_id)
+            merged_docs.append(doc)
+    
+    if not merged_docs:
+        print("[WARNING] No documents retrieved from vectorstore")
+        return {}
+    
+    print(f"[INFO] Retrieved {len(merged_docs)} total chunks (comprehensive: {len(all_docs)}, budget: {len(budget_docs)}, numeric: {len(numeric_docs)})")
+    
+    # Sort by page number for coherent context
+    try:
+        docs_sorted = sorted(merged_docs, key=lambda d: int(d.get('page_number', 0)))
+    except Exception:
+        docs_sorted = merged_docs
+    
+    # Build context text with page markers
+    context_text = ""
+    for doc in docs_sorted:
+        page_num = doc.get("page_number", "Unknown")
+        text = doc.get("text", "")
+        source = doc.get("source", "Unknown")
+        context_text += f"[Page {page_num} | Source: {source}]\n{text}\n\n"
+    
+    print(f"[INFO] Total context length: {len(context_text)} characters")
 
     if not context_text:
+        print("[WARNING] Context text is empty after building from docs")
         return {}
 
     # Prepare full prompt with domain context

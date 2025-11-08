@@ -24,8 +24,9 @@ def vectorstore_agent(pages: list, config_path="config.yaml", persist_dir=None, 
     # Each evaluation gets a fresh, isolated vectorstore
     db = create_vectorstore(documents, embedder, persist_dir=persist_dir)
     
-    # Use deterministic retriever settings by default (fixed k, similarity search)
-    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+    # Use higher k value to retrieve more context (increased from 10 to 50)
+    # This ensures we capture comprehensive information from the proposal
+    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 50})
 
     # wrapped retriever
     def ask(query: str):

@@ -1,6 +1,7 @@
 from langchain_community.vectorstores import Chroma
 import os
 import shutil
+import uuid
 from langchain.schema import Document
 
 def create_vectorstore(docs: list[Document], embeddings, persist_dir=None):
@@ -9,19 +10,29 @@ def create_vectorstore(docs: list[Document], embeddings, persist_dir=None):
     
     If persist_dir is None, creates an in-memory vectorstore (recommended for evaluation isolation).
     If persist_dir is provided, persists to that directory.
+    
+    ISOLATION: Each vectorstore gets a unique collection name to prevent contamination.
     """
     if persist_dir is None:
-        # In-memory mode - no persistence, no contamination
+        # In-memory mode with unique collection name for complete isolation
+        unique_collection_name = f"eval_{uuid.uuid4().hex[:16]}"
+        
         db = Chroma.from_documents(
             documents=docs,
-            embedding=embeddings
+            embedding=embeddings,
+            collection_name=unique_collection_name
         )
     else:
+        # Persistent mode
         os.makedirs(persist_dir, exist_ok=True)
+        
+        unique_collection_name = f"eval_{uuid.uuid4().hex[:16]}"
+        
         db = Chroma.from_documents(
             documents=docs,        # <-- preserve text + metadata
             embedding=embeddings,  
-            persist_directory=persist_dir
+            persist_directory=persist_dir,
+            collection_name=unique_collection_name
         )
     return db
 

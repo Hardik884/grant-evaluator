@@ -34,15 +34,16 @@ def run_budget_agent(budget_input, max_budget=None, domain="General"):
         domain=domain
     )
 
-    # Call LLM
-    response = gemini_llm(prompt)
+    # Call LLM with higher token limit for detailed extraction
+    response = gemini_llm(prompt, max_output_tokens=8192)
 
     cleaned_response = strip_codeblock(response)
 
     # Parse JSON safely
     try:
         budget_result = json.loads(cleaned_response)
-    except json.JSONDecodeError:
-        budget_result = {"raw_response": cleaned_response}
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Budget agent JSON parse error: {e}")
+        budget_result = {"raw_response": cleaned_response, "totalBudget": 0.0, "breakdown": [], "flags": []}
 
     return budget_result
