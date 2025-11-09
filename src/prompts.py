@@ -30,39 +30,196 @@ The summary must capture the meaning, intent, and emphasis of the proposal accur
 using terminology appropriate for the **{domain}** research area.
 
 ### CRITICAL RULES:
-- **Do NOT invent, infer, assume, or guess missing details.**
-- If information is unclear or missing, state:
+- **IMPORTANT: Some proposals may not have explicitly labeled sections. Extract the CONTENT even if section headers are different or missing.**
+- **Look for concepts, not just section titles.** For example:
+  - "Expected Outcomes" may be in "Objectives", "Goals", "Impact", or "Results" sections
+  - "Innovation" may be described in "Project Description", "Approach", or "Methodology"
+  - "Feasibility" may be in "Sustainability", "Future Funding", "Resources", or "Capacity"
+- **FALLBACK EXTRACTION STRATEGY:** If you cannot find a dedicated section:
+  1. **Search the entire proposal** for relevant content about that concept
+  2. **Infer and extract** information scattered across multiple sections
+  3. **Synthesize** a coherent summary from what you find
+  4. **For Innovation specifically:** Look for novel approaches, unique methods, new technologies, creative solutions, or what makes this project different from existing work
+  5. **For Feasibility:** Look for organizational capacity, past success, resources, partnerships, timeline realism, or continuation plans
+  6. **For Expected Outcomes:** Look for quantifiable goals, measurable targets, success metrics, or anticipated results
+- **Only if information is completely absent** (not just unlabeled), state:
   - "text": "Not provided"
   - "pages": []
   - "references": []
   - "notes": "Section missing or insufficiently described."
-- You must base the summary **strictly on the provided text only.**
+- You must base the summary **on the provided text**, but you may **infer and synthesize** when content is present but not explicitly labeled.
 
-Include all of the following sections (even if missing in the text):
-- CoverLetter
-- Objectives
-- Methodology
-- EvaluationPlan
-- ExpectedOutcomes
-- Budget
-- Feasibility
-- Innovation
-- Sustainability
-- LettersOfSupport
+Include all of the following sections (even if the original document uses different names):
+- **CoverLetter** (may be labeled: "Cover Letter", "Introduction", opening letter)
+- **Objectives** (may be labeled: "Goals", "Purpose", "Aims", "Project Objectives")
+- **Methodology** (may be labeled: "Methods", "Approach", "Project Description", "Activities", "Implementation Plan")
+- **EvaluationPlan** (may be labeled: "Evaluation", "Assessment", "Monitoring", "Success Metrics")
+- **ExpectedOutcomes** (may be labeled: "Outcomes", "Expected Results", "Impact", "Deliverables" - often embedded in Objectives section)
+- **Budget** (may be labeled: "Budget", "Budget Narrative", "Costs", "Financial Plan")
+- **Feasibility** (may be labeled: "Sustainability", "Future Funding", "Organizational Capacity", "Resources", "Long-term Plans")
+- **Innovation** (may be labeled: "Innovative Approach", "Novel Aspects", "Unique Features" - often embedded in Methodology or Project Description)
+- **Sustainability** (may be labeled: "Future Plans", "Long-term Sustainability", "Continuation Plan")
+- **LettersOfSupport** (may be labeled: "Letters of Support", "Endorsements", "Partner Letters")
 
 ### For each section, include:
 - "text": A clear, detailed summary capturing specific actions, strategies, stakeholders, or workflows.
 - "pages": List of page numbers where relevant information appears.
-- "references": Exact short quotes or key phrases from the proposal to support the summary.
+- "references": Exact short quotes or key phrases from the proposal to support the summary. **Format each reference as: "[Page X] Quote text" or "[Page X, approx. line Y] Quote text" when possible.**
 - "notes": Expert commentary on completeness, clarity, relevance, or missing details.
 
+### SPECIAL EXTRACTION GUIDELINES:
+
+**For ExpectedOutcomes:**
+- **PRIMARY SEARCH:** Look for sections labeled "Expected Outcomes", "Outcomes", "Expected Results", "Impact", "Deliverables"
+- **SECONDARY SEARCH:** If no dedicated outcomes section, extract from:
+  - Objectives section (often contains outcome statements)
+  - Goals section (quantifiable targets)
+  - Evaluation Plan (success metrics and indicators)
+  - Project Description (anticipated results)
+- **LOOK FOR:**
+  - Quantifiable targets (e.g., "reduce by 20%", "increase by X", "serve Y people")
+  - Measurable outcomes and success indicators
+  - Specific deliverables or products
+  - Timeline-bound achievements
+  - Before/after comparisons
+- **INFERENCE ALLOWED:** Extract outcome-focused statements even if not explicitly labeled as "outcomes"
+- May overlap with Objectives - that's OK, extract the outcome-focused content
+
+**For Innovation:**
+- **PRIMARY SEARCH:** Look for sections labeled "Innovation", "Innovative Approach", "Novel Aspects", "Unique Features"
+- **SECONDARY SEARCH:** If no dedicated innovation section exists, search throughout the proposal for:
+  - Novel or unique methodologies, approaches, or techniques
+  - New technologies, tools, or equipment being introduced
+  - Creative solutions to existing problems
+  - What makes this project different from similar existing programs
+  - Cutting-edge or state-of-the-art elements
+  - First-time implementations or pilot programs
+  - Improvements over traditional methods
+- **EXTRACTION LOCATIONS:** Check Project Description, Methodology, Approach, Objectives, and Summary sections
+- **INFERENCE ALLOWED:** If innovation is implied but not explicitly stated, infer it from:
+  - Descriptions of new equipment or facilities (e.g., "first fitness center for police department")
+  - Novel combinations of existing approaches
+  - Unique target populations or contexts
+  - New partnerships or collaborations
+- **IF NO INNOVATION FOUND:** Only after thoroughly searching the entire proposal, if truly no innovative elements exist, state:
+  - "text": "No explicit innovative elements identified. Project appears to use established methods and approaches."
+  - Include this in "notes" rather than leaving it as "Not provided"
+
+**For Feasibility:**
+- **PRIMARY SEARCH:** Look for sections labeled "Feasibility", "Sustainability", "Future Funding", "Organizational Capacity", "Resources"
+- **SECONDARY SEARCH:** If no dedicated feasibility section, extract from:
+  - Sustainability or continuation plans
+  - Future funding commitments
+  - Organizational capacity descriptions
+  - Resource availability statements
+  - Past success or track record
+  - Partnership agreements or letters of support
+  - Timeline and project management plans
+- **LOOK FOR:**
+  - Evidence of capability to execute (staff qualifications, experience, facilities)
+  - Long-term sustainability plans and maintenance commitments
+  - Institutional or partner support
+  - Resource availability (funding, equipment, personnel)
+  - Realistic timelines and milestones
+  - Risk mitigation strategies
+- **INFERENCE ALLOWED:** Synthesize feasibility assessment from scattered evidence throughout the proposal
+- Include any commitments from stakeholders or funding bodies for continuation
+
+**For CoverLetter:**
+- **PRIMARY SEARCH:** Look for sections labeled "Cover Letter", "Introduction", "Letter of Intent"
+- **SECONDARY SEARCH:** If no dedicated cover letter, look for:
+  - Opening statement or introduction
+  - Initial paragraphs that introduce the organization and project
+  - Executive summary or opening remarks
+- **LOOK FOR:**
+  - Introduction of the applicant organization
+  - Brief project overview
+  - Funding amount requested
+  - Contact information
+- **INFERENCE ALLOWED:** Extract introductory content even if not formally labeled as cover letter
+
+**For Objectives:**
+- **PRIMARY SEARCH:** Look for sections labeled "Objectives", "Goals", "Aims", "Project Objectives", "Purpose"
+- **SECONDARY SEARCH:** If no dedicated objectives section, extract from:
+  - Summary or introduction (often states main goals)
+  - Problem statement (goals are often stated as solutions)
+  - Project description (embedded objectives)
+- **LOOK FOR:**
+  - Specific, measurable goals
+  - What the project aims to achieve
+  - Target populations or beneficiaries
+  - Timeframes for objectives
+- **INFERENCE ALLOWED:** Extract goal statements from throughout the proposal
+
+**For Methodology:**
+- **PRIMARY SEARCH:** Look for sections labeled "Methodology", "Methods", "Approach", "Project Description", "Activities", "Implementation Plan"
+- **SECONDARY SEARCH:** If no dedicated methodology section, extract from:
+  - Project description or narrative
+  - Work plan or timeline sections
+  - Activity descriptions
+- **LOOK FOR:**
+  - Specific activities and interventions
+  - Step-by-step implementation plan
+  - Resources and tools to be used
+  - Roles and responsibilities
+  - Timeline and phases
+- **INFERENCE ALLOWED:** Synthesize methodology from scattered activity descriptions
+
+**For EvaluationPlan:**
+- **PRIMARY SEARCH:** Look for sections labeled "Evaluation", "Evaluation Plan", "Assessment", "Monitoring", "Success Metrics"
+- **SECONDARY SEARCH:** If no dedicated evaluation section, look for:
+  - Measurement strategies mentioned in objectives
+  - Success indicators or metrics
+  - Data collection plans
+  - Quality assurance descriptions
+- **LOOK FOR:**
+  - How success will be measured
+  - Data collection methods
+  - Evaluation timeline
+  - Performance indicators
+  - Who will conduct the evaluation
+- **INFERENCE ALLOWED:** Extract evaluation-related content from objectives, methodology, or outcomes sections
+
+**For Sustainability:**
+- **PRIMARY SEARCH:** Look for sections labeled "Sustainability", "Future Plans", "Long-term Sustainability", "Continuation Plan"
+- **SECONDARY SEARCH:** If no dedicated sustainability section, extract from:
+  - Future funding section
+  - Organizational capacity descriptions
+  - Long-term goals or vision statements
+- **LOOK FOR:**
+  - Plans for continuing the project after funding ends
+  - Future funding sources identified
+  - Institutional commitments
+  - Long-term impact plans
+- **INFERENCE ALLOWED:** Synthesize sustainability from future funding and capacity statements
+
+**For LettersOfSupport:**
+- **PRIMARY SEARCH:** Look for sections labeled "Letters of Support", "Endorsements", "Partner Letters", "Appendices"
+- **SECONDARY SEARCH:** If no dedicated letters section, look for:
+  - Partnership descriptions
+  - Stakeholder commitments
+  - References to supporting organizations
+- **LOOK FOR:**
+  - Letters from partners or stakeholders
+  - Formal endorsements
+  - Memoranda of understanding (MOUs)
+  - Commitment statements
+- **INFERENCE ALLOWED:** Note mentions of partner support even if formal letters aren't included
+
 ### SPECIAL INSTRUCTIONS FOR BUDGET SECTION:
+- **PRIMARY SEARCH:** Look for sections labeled "Budget", "Budget Narrative", "Costs", "Financial Plan"
+- **SECONDARY SEARCH:** If no dedicated budget section, search for:
+  - Dollar amounts and cost figures anywhere in the proposal
+  - Resource requirements
+  - Personnel costs in staffing sections
+  - Equipment lists with prices
 - **EXTRACT ALL DOLLAR AMOUNTS, LINE ITEMS, AND COST CATEGORIES** from the proposal
 - Include budget tables, personnel costs, equipment, materials, travel expenses, indirect costs
 - Copy exact dollar figures (e.g., "$50,000 for personnel", "$10,000 for equipment")
 - List ALL budget categories mentioned with their specific amounts
 - In the "text" field, provide a detailed itemized breakdown with actual numbers
-- In "references", include direct quotes with dollar amounts
+- In "references", include direct quotes with dollar amounts **formatted as: "[Page X] Quote with dollar amount"**
+- **INFERENCE ALLOWED:** Compile budget information from scattered cost mentions throughout the proposal
 
 If the proposal does not contain enough information for a section, explicitly state:
 - text: "Not provided"
@@ -72,6 +229,10 @@ If the proposal does not contain enough information for a section, explicitly st
 
 The input text includes page markers in the format:
 [Page X | Source: filename.pdf]
+
+**IMPORTANT:** When creating references, extract the page number from these markers and format your references as:
+- "[Page X] Direct quote from the proposal"
+- This helps reviewers quickly locate and verify the quoted content
 
 ### Input Proposal Text:
 {context}
@@ -94,6 +255,15 @@ Your task is to evaluate the quality of each section objectively and produce **s
 - Return **only valid JSON** exactly in the requested structure.
 - **IMPORTANT: You MUST complete the entire JSON response. Do not truncate strings or leave objects incomplete.**
 - Keep strengths and weaknesses concise (under 100 characters each) to ensure completion.
+
+### SPECIAL NOTE ON SECTION EVALUATION:
+- **Some proposals may have content in non-standard sections.** For example:
+  - Expected Outcomes may be embedded in Objectives
+  - Innovation may be described in Methodology or Project Description
+  - Feasibility may be discussed in Sustainability or Future Funding
+- **Score based on the CONTENT provided, even if it came from a different section of the original document.**
+- If a section shows "Not provided" or similar, give it a low score (0-2) with appropriate feedback.
+- If a section contains substantive content (regardless of origin), score it based on that content's quality.
 
 ### SCORING INSTRUCTIONS
 1. **Rate each section from 0 to 10**

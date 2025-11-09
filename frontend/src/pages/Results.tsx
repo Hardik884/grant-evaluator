@@ -236,6 +236,62 @@ export function Results() {
       ),
     },
     {
+      id: 'summary',
+      label: 'Narrative Summary',
+      content: safeEvaluation.summary && Object.keys(safeEvaluation.summary).length > 0 ? (
+        <Card>
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 text-secondary">
+              <FolderOpen className="h-5 w-5" />
+              <h3 className="text-2xl font-semibold text-white">Section breakdown</h3>
+            </div>
+            {Object.entries(safeEvaluation.summary).map(([section, data]) => {
+              const formattedSection = section.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+              return (
+                <div key={section} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <h4 className="text-lg font-semibold text-white">{formattedSection}</h4>
+                  {data.text && (
+                    <p className="mt-2 text-sm leading-relaxed text-slate-200">{data.text}</p>
+                  )}
+                  {Array.isArray(data.notes) && data.notes.length > 0 && (
+                    <div className="mt-3 space-y-1 text-sm text-slate-300">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Notes</p>
+                      <ul className="list-disc pl-4">
+                        {data.notes.map((note, i) => (
+                          <li key={i}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {typeof data.notes === 'string' && (
+                    <div className="mt-3 text-sm text-slate-300">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Notes</p>
+                      <p>{data.notes}</p>
+                    </div>
+                  )}
+                  {Array.isArray(data.references) && data.references.length > 0 && (
+                    <div className="mt-3 space-y-1 text-sm text-slate-300">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">References</p>
+                      <ul className="list-disc pl-4">
+                        {data.references.map((ref, i) => (
+                          <li key={i}>{ref}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <p className="text-sm text-slate-400">No narrative summary available for this evaluation.</p>
+        </Card>
+      ),
+    },
+    {
       id: 'detailed',
       label: 'Detailed Scoring',
       content: (
@@ -402,62 +458,6 @@ export function Results() {
             );
           })}
         </div>
-      ),
-    },
-    {
-      id: 'summary',
-      label: 'Narrative Summary',
-      content: safeEvaluation.summary && Object.keys(safeEvaluation.summary).length > 0 ? (
-        <Card>
-          <div className="space-y-6">
-            <div className="flex items-center gap-2 text-secondary">
-              <FolderOpen className="h-5 w-5" />
-              <h3 className="text-2xl font-semibold text-white">Section breakdown</h3>
-            </div>
-            {Object.entries(safeEvaluation.summary).map(([section, data]) => {
-              const formattedSection = section.replace(/([a-z])([A-Z])/g, '$1 $2');
-
-              return (
-                <div key={section} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <h4 className="text-lg font-semibold text-white">{formattedSection}</h4>
-                  {data.text && (
-                    <p className="mt-2 text-sm leading-relaxed text-slate-200">{data.text}</p>
-                  )}
-                  {Array.isArray(data.notes) && data.notes.length > 0 && (
-                    <div className="mt-3 space-y-1 text-sm text-slate-300">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Notes</p>
-                      <ul className="list-disc pl-4">
-                        {data.notes.map((note, i) => (
-                          <li key={i}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {typeof data.notes === 'string' && (
-                    <div className="mt-3 text-sm text-slate-300">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Notes</p>
-                      <p>{data.notes}</p>
-                    </div>
-                  )}
-                  {Array.isArray(data.references) && data.references.length > 0 && (
-                    <div className="mt-3 space-y-1 text-sm text-slate-300">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-secondary">References</p>
-                      <ul className="list-disc pl-4">
-                        {data.references.map((ref, i) => (
-                          <li key={i}>{ref}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      ) : (
-        <Card>
-          <p className="text-sm text-slate-400">No narrative summary available for this evaluation.</p>
-        </Card>
       ),
     },
     {

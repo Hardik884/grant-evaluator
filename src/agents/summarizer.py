@@ -81,8 +81,10 @@ def run_summarizer_extended(retriever_fn, domain="General"):
     # Strategy 1: Get a larger set of documents with one comprehensive query
     comprehensive_query = (
         "Retrieve all sections of this grant proposal including: "
-        "cover letter, objectives, methodology, evaluation plan, expected outcomes, "
-        "budget, feasibility, innovation, sustainability, and letters of support"
+        "cover letter, objectives, goals, aims, methodology, methods, approach, project description, "
+        "evaluation plan, assessment, expected outcomes, results, impact, deliverables, "
+        "budget, costs, financial plan, feasibility, sustainability, future funding, capacity, "
+        "innovation, novel approach, unique features, and letters of support"
     )
     
     all_docs = retriever_fn(comprehensive_query)
@@ -99,11 +101,25 @@ def run_summarizer_extended(retriever_fn, domain="General"):
     numeric_query = "$ dollars table cost breakdown itemized line items total amount"
     numeric_docs = retriever_fn(numeric_query)
     
+    # Strategy 4: Add outcomes and impact retrieval
+    outcomes_query = (
+        "expected outcomes results impact deliverables targets goals achievements "
+        "reduce increase improve measure percent performance indicators success metrics"
+    )
+    outcomes_docs = retriever_fn(outcomes_query)
+    
+    # Strategy 5: Add innovation and feasibility retrieval
+    innovation_query = (
+        "innovation innovative novel unique new approach cutting-edge original "
+        "feasibility sustainability future funding capacity resources organizational support"
+    )
+    innovation_docs = retriever_fn(innovation_query)
+    
     # Merge documents, avoiding duplicates
     doc_ids = set()
     merged_docs = []
     
-    for doc in all_docs + budget_docs + numeric_docs:
+    for doc in all_docs + budget_docs + numeric_docs + outcomes_docs + innovation_docs:
         # Create unique ID based on content hash
         doc_id = hash(doc.get('text', '')[:100])
         if doc_id not in doc_ids:
@@ -114,7 +130,7 @@ def run_summarizer_extended(retriever_fn, domain="General"):
         print("[WARNING] No documents retrieved from vectorstore")
         return {}
     
-    print(f"[INFO] Retrieved {len(merged_docs)} total chunks (comprehensive: {len(all_docs)}, budget: {len(budget_docs)}, numeric: {len(numeric_docs)})")
+    print(f"[INFO] Retrieved {len(merged_docs)} total chunks across {5} retrieval strategies")
     
     # Sort by page number for coherent context
     try:
