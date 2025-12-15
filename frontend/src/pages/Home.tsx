@@ -278,7 +278,7 @@ export function Home() {
     setPipelineError(null);
     setIsEvaluating(true);
 
-    openStatusSocket(newSessionId);
+    // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
 
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
