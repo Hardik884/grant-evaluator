@@ -6,8 +6,12 @@ import { LoadingAnimation } from '../components/LoadingAnimation';
 import { evaluationService } from '../services/evaluationService';
 import { pipelineStages, type StageStatus } from '../components/pipelineStages';
 
-const API_BASE_URL = ((import.meta as unknown) as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL
+const rawApiBase = ((import.meta as unknown) as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL
   || 'http://localhost:8000/api';
+let API_BASE_URL = String(rawApiBase ?? '').replace(/\/+$/g, '');
+if (!API_BASE_URL.endsWith('/api')) {
+  API_BASE_URL = API_BASE_URL + '/api';
+}
 
 const deriveWebSocketBase = (apiUrl: string): string => {
   const trimmed = apiUrl.replace(/\/+$/, '');

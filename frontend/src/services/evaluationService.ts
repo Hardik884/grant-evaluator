@@ -1,7 +1,11 @@
 import type { Evaluation, Settings } from '../types/evaluation';
 
-// Backend API base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// Backend API base URL (normalize value so it always ends with '/api' and has no trailing slash)
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+let API_BASE_URL = String(rawApiBase ?? '').replace(/\/+$/g, '');
+if (!API_BASE_URL.endsWith('/api')) {
+  API_BASE_URL = API_BASE_URL + '/api';
+}
 
 // Helper function for retrying failed requests
 async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 2): Promise<Response> {
