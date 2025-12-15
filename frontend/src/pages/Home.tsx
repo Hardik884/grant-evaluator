@@ -14,15 +14,22 @@ if (!API_BASE_URL.endsWith('/api')) {
 }
 
 const deriveWebSocketBase = (apiUrl: string): string => {
-  const trimmed = apiUrl.replace(/\/+$/, '');
-  const withoutApi = trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
-  if (withoutApi.startsWith('https://')) {
-    return `wss://${withoutApi.slice('https://'.length)}`;
+  // Remove trailing slashes and /api suffix
+  let trimmed = apiUrl.replace(/\/+$/, '');
+  if (trimmed.endsWith('/api')) {
+    trimmed = trimmed.slice(0, -4);
   }
-  if (withoutApi.startsWith('http://')) {
-    return `ws://${withoutApi.slice('http://'.length)}`;
+  
+  // Convert http(s):// to ws(s)://
+  if (trimmed.startsWith('https://')) {
+    return trimmed.replace('https://', 'wss://');
   }
-  return withoutApi;
+  if (trimmed.startsWith('http://')) {
+    return trimmed.replace('http://', 'ws://');
+  }
+  
+  // Fallback: assume it's already a WebSocket URL or localhost
+  return trimmed;
 };
 
 const WS_BASE_URL = deriveWebSocketBase(API_BASE_URL);
