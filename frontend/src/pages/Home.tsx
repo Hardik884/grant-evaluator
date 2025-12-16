@@ -265,7 +265,14 @@ export function Home() {
   };
 
   const handleEvaluate = async () => {
-    if (!file) return;
+    if (!file) {
+      alert('Please select a file first');
+      return;
+    }
+
+    console.log('[DEBUG] Starting evaluation for file:', file.name);
+    console.log('[DEBUG] API Base URL:', API_BASE_URL);
+    console.log('[DEBUG] WebSocket Base URL:', WS_BASE_URL);
 
     const newSessionId =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -277,6 +284,8 @@ export function Home() {
     setStatusMessage('Uploading file and starting evaluation...');
     setPipelineError(null);
     setIsEvaluating(true);
+
+    console.log('[DEBUG] Loading state set to true');
 
     // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
 
@@ -300,8 +309,10 @@ export function Home() {
 
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
+      console.log('[DEBUG] Sending request to backend...');
       setStatusMessage('Processing grant proposal...');
       const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism, newSessionId);
+      console.log('[DEBUG] Evaluation saved:', saved);
       clearInterval(progressInterval);
       setPipelineProgress(100);
       setStageStatuses(pipelineStages.map(() => 'complete'));
@@ -311,11 +322,21 @@ export function Home() {
       }, 500);
     } catch (error) {
       clearInterval(progressInterval);
-      console.error('Evaluation failed:', error);
-      const fallbackMessage = error instanceof Error ? error.message : 'Evaluation failed. Please try again.';
-      setPipelineError(fallbackMessage);
-      setStatusMessage(fallbackMessage);
+      console.error('[ERROR] Evaluation failed:', error);
+      
+      let errorMessage = 'Evaluation failed. ';
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        errorMessage += 'Cannot connect to backend. Check: 1) CORS settings on Render (ALLOWED_ORIGINS), 2) Backend is running, 3) VITE_API_BASE_URL is correct in Vercel.';
+      } else if (error instanceof Error) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Unknown error occurred.';
+      }
+      
+      setPipelineError(errorMessage);
+      setStatusMessage(errorMessage);
       setIsEvaluating(false);
+      alert(errorMessage);
       websocketRef.current?.close();
       websocketRef.current = null;
     }
