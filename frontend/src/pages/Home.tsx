@@ -289,23 +289,39 @@ export function Home() {
 
     // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
 
-    // Simulate progress updates without websocket
+    // Simulate progress updates without websocket - cycle through stages
+    let currentStageIndex = 0;
     const progressInterval = setInterval(() => {
       setPipelineProgress((prev) => {
-        const next = prev + 5;
-        return next >= 90 ? 90 : next;
+        const next = prev + 3;
+        return next >= 95 ? 95 : next;
       });
+      
       setStageStatuses((prev) => {
-        const currentActive = prev.findIndex((s) => s === 'active' || s === 'pending');
-        if (currentActive === -1) return prev;
         const updated = [...prev];
-        if (currentActive > 0) {
-          updated[currentActive - 1] = 'complete';
+        // Mark previous stages as complete
+        for (let i = 0; i < currentStageIndex; i++) {
+          updated[i] = 'complete';
         }
-        updated[currentActive] = 'active';
+        // Mark current stage as active
+        if (currentStageIndex < pipelineStages.length) {
+          updated[currentStageIndex] = 'active';
+          // Update status message to current stage
+          setStatusMessage(pipelineStages[currentStageIndex].label);
+        }
+        // Mark future stages as pending
+        for (let i = currentStageIndex + 1; i < pipelineStages.length; i++) {
+          updated[i] = 'pending';
+        }
         return updated;
       });
-    }, 2000);
+      
+      // Move to next stage
+      currentStageIndex++;
+      if (currentStageIndex >= pipelineStages.length) {
+        currentStageIndex = pipelineStages.length - 1; // Stay on last stage
+      }
+    }, 3000); // Change stage every 3 seconds
 
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
