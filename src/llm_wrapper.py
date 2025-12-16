@@ -33,7 +33,7 @@ def gemini_llm(prompt: str,
                temperature: float | None = None,
                max_output_tokens: int | None = None,
                candidate_count: int | None = None,
-               model_name: str = 'gemini-2.0-flash') -> str:
+               model_name: str = 'gemini-2.5-flash') -> str:
     """
     Call Gemini with deterministic defaults. Logs prompt and response to `logs/llm_calls.log`.
 

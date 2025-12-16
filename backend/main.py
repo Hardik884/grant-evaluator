@@ -208,6 +208,27 @@ async def create_evaluation(
             )
 
         evaluation_result = await loop.run_in_executor(None, run_pipeline)
+    
+    except Exception as e:
+        # Check for API quota errors
+        error_message = str(e)
+        if "429" in error_message or "quota" in error_message.lower() or "ResourceExhausted" in str(type(e).__name__):
+            print(f"[ERROR] API quota exceeded: {error_message}")
+            if session_id:
+                await websocket_manager.send(session_id, {
+                    "event": "error",
+                    "message": "AI API quota exceeded. Please wait a few minutes and try again, or check your API key billing.",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+            raise HTTPException(
+                status_code=429,
+                detail="AI API quota exceeded. Please wait a few minutes and try again, or upgrade your API plan."
+            )
+        
+        # Re-raise other errors to be caught by outer exception handler
+        raise
+    
+    try:
 
         # Prepare document for MongoDB
         evaluation_doc = {
