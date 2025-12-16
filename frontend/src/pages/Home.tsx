@@ -274,22 +274,47 @@ export function Home() {
 
     setStageStatuses(pipelineStages.map(() => 'pending'));
     setPipelineProgress(0);
-    setStatusMessage('Preparing evaluation pipeline...');
+    setStatusMessage('Uploading file and starting evaluation...');
     setPipelineError(null);
     setIsEvaluating(true);
 
     // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
 
+    // Simulate progress updates without websocket
+    const progressInterval = setInterval(() => {
+      setPipelineProgress((prev) => {
+        const next = prev + 5;
+        return next >= 90 ? 90 : next;
+      });
+      setStageStatuses((prev) => {
+        const currentActive = prev.findIndex((s) => s === 'active' || s === 'pending');
+        if (currentActive === -1) return prev;
+        const updated = [...prev];
+        if (currentActive > 0) {
+          updated[currentActive - 1] = 'complete';
+        }
+        updated[currentActive] = 'active';
+        return updated;
+      });
+    }, 2000);
+
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
+      setStatusMessage('Processing grant proposal...');
       const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism, newSessionId);
-      navigate(`/results/${saved.id}`);
+      clearInterval(progressInterval);
+      setPipelineProgress(100);
+      setStageStatuses(pipelineStages.map(() => 'complete'));
+      setStatusMessage('Evaluation complete! Redirecting to results...');
+      setTimeout(() => {
+        navigate(`/results/${saved.id}`);
+      }, 500);
     } catch (error) {
+      clearInterval(progressInterval);
       console.error('Evaluation failed:', error);
-      const fallbackMessage = 'Evaluation failed. Please try again.';
+      const fallbackMessage = error instanceof Error ? error.message : 'Evaluation failed. Please try again.';
       setPipelineError(fallbackMessage);
       setStatusMessage(fallbackMessage);
-      alert('Evaluation failed. Please try again.');
       setIsEvaluating(false);
       websocketRef.current?.close();
       websocketRef.current = null;
