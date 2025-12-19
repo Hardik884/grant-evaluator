@@ -47,9 +47,9 @@ export const evaluationService = {
       formData.append('session_id', sessionId);
     }
 
-    // Add timeout to detect hanging requests (5 minutes for long evaluations)
+    // Increased timeout for first-time model downloads (10 minutes)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min timeout
 
     try {
       const response = await fetch(`${API_BASE_URL}/evaluations`, {
@@ -69,7 +69,7 @@ export const evaluationService = {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout: Backend took too long to respond (>5 min). Check backend logs.');
+        throw new Error('Request timeout: Backend took >10 min. First deployment may need time to download models (~500MB). Try again in a few minutes or check Render logs for memory/build issues.');
       }
       throw error;
     }

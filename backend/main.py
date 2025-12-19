@@ -111,6 +111,25 @@ async def get_domains():
     return {"domains": get_all_domains()}
 
 
+@app.get("/api/health")
+async def health_check():
+    """Detailed health check to verify backend is responsive"""
+    import psutil
+    import os
+    
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "memory_mb": round(memory_info.rss / 1024 / 1024, 2),
+        "memory_percent": round(process.memory_percent(), 2),
+        "cpu_percent": round(process.cpu_percent(interval=0.1), 2),
+        "message": "Backend is alive and responding"
+    }
+
+
 @app.websocket("/ws/evaluation/{session_id}")
 async def evaluation_status_socket(websocket: WebSocket, session_id: str):
     """Stream live evaluation status updates to connected clients."""
@@ -148,6 +167,11 @@ async def create_evaluation(
         domain: Optional user-specified domain (overrides auto-detection)
         check_plagiarism: Whether to run plagiarism detection
     """
+    print("="*80)
+    print(f"[INFO] NEW EVALUATION REQUEST RECEIVED")
+    print(f"[INFO] File: {file.filename}, Domain: {domain}, Plagiarism: {check_plagiarism}")
+    print(f"[INFO] Session ID: {session_id}")
+    print("="*80)
     
     # Validate file type
     allowed_extensions = ['.pdf', '.docx']
