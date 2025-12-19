@@ -57,7 +57,7 @@ langchain==0.3.27
 langchain-community==0.3.29
 langchain-core==0.3.76
 langchain-google-genai==2.0.10
-# langchain-huggingface==0.3.1  # NOT NEEDED: Using Google API embeddings instead
+langchain-huggingface==0.3.1  # Required for HuggingFaceEndpointEmbeddings API
 langchain-text-splitters==0.3.11
 langsmith==0.4.27
 lxml==6.0.1
