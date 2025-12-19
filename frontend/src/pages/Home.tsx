@@ -289,13 +289,32 @@ export function Home() {
 
     // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
 
-    // Simulate progress updates without websocket - cycle through stages
+    // Simulate progress updates without websocket - slower, more realistic progress
     let currentStageIndex = 0;
+    const stageTimings = [15, 10, 25, 20, 15, 10, 10, 15]; // Seconds per stage (total ~120s)
+    let elapsedTime = 0;
+    
     const progressInterval = setInterval(() => {
-      setPipelineProgress((prev) => {
-        const next = prev + 3;
-        return next >= 95 ? 95 : next;
-      });
+      elapsedTime += 2; // Update every 2 seconds
+      
+      // Calculate which stage we should be on based on elapsed time
+      let timeSum = 0;
+      let targetStage = 0;
+      for (let i = 0; i < stageTimings.length; i++) {
+        timeSum += stageTimings[i];
+        if (elapsedTime < timeSum) {
+          targetStage = i;
+          break;
+        }
+        targetStage = stageTimings.length - 1;
+      }
+      
+      currentStageIndex = targetStage;
+      
+      // Update progress based on time (caps at 95% until actual completion)
+      const totalTime = stageTimings.reduce((a, b) => a + b, 0);
+      const progressPercent = Math.min(95, (elapsedTime / totalTime) * 100);
+      setPipelineProgress(progressPercent);
       
       setStageStatuses((prev) => {
         const updated = [...prev];
@@ -306,7 +325,6 @@ export function Home() {
         // Mark current stage as active
         if (currentStageIndex < pipelineStages.length) {
           updated[currentStageIndex] = 'active';
-          // Update status message to current stage
           setStatusMessage(pipelineStages[currentStageIndex].label);
         }
         // Mark future stages as pending
@@ -315,13 +333,7 @@ export function Home() {
         }
         return updated;
       });
-      
-      // Move to next stage
-      currentStageIndex++;
-      if (currentStageIndex >= pipelineStages.length) {
-        currentStageIndex = pipelineStages.length - 1; // Stay on last stage
-      }
-    }, 3000); // Change stage every 3 seconds
+    }, 2000); // Update every 2 seconds
 
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
