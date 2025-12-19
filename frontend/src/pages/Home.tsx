@@ -287,14 +287,18 @@ export function Home() {
 
     console.log('[DEBUG] Loading state set to true');
 
-    // openStatusSocket(newSessionId); // Disabled: WebSocket status updates (uncomment to re-enable)
-
-    // Simulate progress updates without websocket - slower, more realistic progress
-    let currentStageIndex = 0;
-    const stageTimings = [15, 10, 25, 20, 15, 10, 10, 15]; // Seconds per stage (total ~120s)
-    let elapsedTime = 0;
+    // Try WebSocket first, fall back to simulation if it fails
+    let progressInterval: NodeJS.Timeout | null = null;
+    let wsConnected = false;
     
-    const progressInterval = setInterval(() => {
+    const startSimulation = () => {
+      console.log('[DEBUG] Starting simulated progress (WebSocket unavailable)');
+      // Simulate progress updates without websocket - slower, more realistic progress
+      let currentStageIndex = 0;
+      const stageTimings = [15, 10, 25, 20, 15, 10, 10, 15]; // Seconds per stage (total ~120s)
+      let elapsedTime = 0;
+      
+      progressInterval = setInterval(() => {
       elapsedTime += 2; // Update every 2 seconds
       
       // Calculate which stage we should be on based on elapsed time
@@ -334,6 +338,26 @@ export function Home() {
         return updated;
       });
     }, 2000); // Update every 2 seconds
+    };
+    
+    // Attempt WebSocket connection with fallback
+    try {
+      openStatusSocket(newSessionId);
+      // Wait 3 seconds to see if WebSocket connects
+      setTimeout(() => {
+        if (!websocketRef.current || websocketRef.current.readyState !== WebSocket.OPEN) {
+          console.log('[DEBUG] WebSocket failed to connect, using simulation');
+          wsConnected = false;
+          startSimulation();
+        } else {
+          console.log('[DEBUG] WebSocket connected successfully');
+          wsConnected = true;
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('[DEBUG] WebSocket error:', error);
+      startSimulation();
+    }
 
     try {
       const domain = useAutoDomain ? undefined : selectedDomain || undefined;
@@ -341,7 +365,7 @@ export function Home() {
       setStatusMessage('Processing grant proposal...');
       const saved = await evaluationService.saveEvaluation(file, domain, checkPlagiarism, newSessionId);
       console.log('[DEBUG] Evaluation saved:', saved);
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setPipelineProgress(100);
       setStageStatuses(pipelineStages.map(() => 'complete'));
       setStatusMessage('Evaluation complete! Redirecting to results...');
@@ -349,7 +373,7 @@ export function Home() {
         navigate(`/results/${saved.id}`);
       }, 500);
     } catch (error) {
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       console.error('[ERROR] Evaluation failed:', error);
       
       let errorMessage = 'Evaluation failed. ';
