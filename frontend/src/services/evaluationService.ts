@@ -47,17 +47,32 @@ export const evaluationService = {
       formData.append('session_id', sessionId);
     }
 
-    const response = await fetch(`${API_BASE_URL}/evaluations`, {
-      method: 'POST',
-      body: formData,
-    });
+    // Add timeout to detect hanging requests (5 minutes for long evaluations)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to evaluate grant');
+    try {
+      const response = await fetch(`${API_BASE_URL}/evaluations`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+        throw new Error(error.detail || 'Failed to evaluate grant');
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout: Backend took too long to respond (>5 min). Check backend logs.');
+      }
+      throw error;
     }
-
-    return await response.json();
   },
 
   async getDomains(): Promise<string[]> {

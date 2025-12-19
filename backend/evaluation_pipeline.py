@@ -461,13 +461,18 @@ def run_full_evaluation(
 
     emit_stage(7, "completed", f"Recommendation ready ({response.get('decision', 'UNKNOWN')})")
 
-    # Cleanup: Explicitly delete vectorstore to ensure no contamination
+    # Cleanup: Explicitly delete vectorstore and free memory
     try:
         if vs and "vectorstore" in vs:
             del vs["vectorstore"]
             del vs
-    except Exception:
-        pass
+        # Clean up embeddings cache to free memory
+        from src.embeddings import cleanup_embeddings
+        cleanup_embeddings()
+        import gc
+        gc.collect()
+    except Exception as e:
+        print(f"[WARNING] Cleanup error: {e}")
 
     return response
 
