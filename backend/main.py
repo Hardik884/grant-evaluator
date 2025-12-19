@@ -5,7 +5,7 @@ Supports file upload, grant evaluation pipeline, and MongoDB Atlas storage
 
 import asyncio
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Any, Dict, List, Optional
@@ -129,6 +129,8 @@ async def health_check():
         "message": "Backend is alive and responding"
     }
 
+@app.head("/api/health")
+async def health_head(): return Response(status_code=200)
 
 @app.websocket("/ws/evaluation/{session_id}")
 async def evaluation_status_socket(websocket: WebSocket, session_id: str):
