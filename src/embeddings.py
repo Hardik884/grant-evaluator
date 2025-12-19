@@ -1,48 +1,40 @@
-from langchain_huggingface import HuggingFaceEmbeddings
-import yaml
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 import os
-import gc
-
-_embeddings_cache = None
 
 def get_embedder(config_path="config.yaml"):
     """
-    Get embeddings model with memory-efficient lazy loading.
-    Uses a lightweight model (all-MiniLM-L6-v2, ~80MB) and caches it to avoid reloading.
-    """
-    global _embeddings_cache
+    Get embeddings using HuggingFace Inference API (zero memory, API-based).
     
-    # Return cached embeddings if available
-    if _embeddings_cache is not None:
-        return _embeddings_cache
+    Uses HUGGINGFACE_API_KEY from environment.
+    Free tier: 1000 requests/day (much higher than Google's free tier)
+    
+    Memory usage: ~0 MB (API calls only, no model loading)
+    
+    Get free API key from: https://huggingface.co/settings/tokens
+    """
+    hf_token = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN")
+    
+    if not hf_token:
+        raise ValueError(
+            "HUGGINGFACE_API_KEY not found in environment.\n"
+            "Get free API key from https://huggingface.co/settings/tokens\n"
+            "Add it to Render environment variables as HUGGINGFACE_API_KEY"
+        )
+    
+    print(f"[INFO] Using HuggingFace Inference API embeddings (zero memory, free tier)")
     
     try:
-        # Load config to check if custom model specified
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        model_name = config.get("embeddings", {}).get("model_name", "sentence-transformers/all-MiniLM-L6-v2")
-    except:
-        # Default to lightweight model (~80MB)
-        model_name = "sentence-transformers/all-MiniLM-L6-v2"
-    
-    print(f"[INFO] Loading embeddings model: {model_name} (cached for session)")
-    
-    # Use lightweight model with minimal memory footprint
-    embedder = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={'device': 'cpu'},  # Force CPU to avoid GPU memory
-        encode_kwargs={'normalize_embeddings': True, 'batch_size': 32}
-    )
-    
-    # Cache for reuse during session
-    _embeddings_cache = embedder
-    return embedder
+        # Use sentence-transformers model via API (no local loading)
+        embedder = HuggingFaceEndpointEmbeddings(
+            model="sentence-transformers/all-MiniLM-L6-v2",
+            huggingfacehub_api_token=hf_token
+        )
+        return embedder
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize HuggingFace embeddings: {e}")
+        print("[INFO] Make sure HUGGINGFACE_API_KEY is set in Render environment")
+        raise
 
 def cleanup_embeddings():
-    """Clean up embeddings cache to free memory after evaluation."""
-    global _embeddings_cache
-    if _embeddings_cache is not None:
-        del _embeddings_cache
-        _embeddings_cache = None
-        gc.collect()
-        print("[INFO] Embeddings cache cleaned up")
+    """No cleanup needed for API-based embeddings."""
+    pass
